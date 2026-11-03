@@ -137,6 +137,8 @@ def _compacto_dia(dia: dict) -> dict:
             "plan": [{k: i.get(k) for k in ("id", "titulo", "tipo", "hora", "accion", "monto", "cuota_ref",
                                              "cuota_min", "p", "p_push", "ev", "razon")} for i in dia.get("plan", [])],
             "misApuestas": dia.get("misApuestas"), "porQueJugadas": dia.get("porQue"),
+            "escalera": {"config": dia.get("progresionCfg"), "proximo": dia.get("escaleraCrec")},
+            "riesgo": dia.get("riesgo"),
             "picks": picks, "jugadas": jug, "bancas": dia.get("bancas"), "politica": dia.get("politica"),
             "liquidado": dia.get("liquidado"), "alertas": dia.get("alertas"), "semaforo": dia.get("semaforo"),
             "simulacion": {k: (dia.get("simulacion") or {}).get(k) for k in ("apostado", "esperado", "pGanar")},
@@ -215,18 +217,23 @@ def _esquema_gemini(s):
 
 
 def _http(url, cuerpo, cabeceras, timeout=60):
-    try:
-        r = requests.post(url, json=cuerpo, headers=cabeceras, timeout=timeout)
-    except requests.RequestException as ex:
-        raise SinCuota(f"red: {type(ex).__name__}") from ex
+    for intento in range(2):
+        try:
+            r = requests.post(url, json=cuerpo, headers=cabeceras, timeout=timeout)
+        except requests.RequestException as ex:
+            raise SinCuota(f"red: {type(ex).__name__}") from ex
+        if r.status_code in (500, 502, 503) and intento == 0:
+            time.sleep(2)                       # saturación pasajera: un reintento rápido
+            continue
+        break
     if r.status_code in (401, 403):
-        raise SinCuota(f"clave rechazada ({r.status_code})")
+        raise SinCuota(f"clave rechazada ({r.status_code}): revisa la clave en Render")
     if r.status_code == 429:
-        raise SinCuota(f"cuota agotada (429): {r.text[:160]}")
+        raise SinCuota("cuota agotada (429)")
     if r.status_code == 503:
         raise SinCuota("modelo saturado (503)")
     if r.status_code >= 400:
-        raise SinCuota(f"HTTP {r.status_code}: {r.text[:200]}")
+        raise SinCuota(f"error {r.status_code}")
     return r.json()
 
 
@@ -242,7 +249,7 @@ def modelo_gemini() -> str:
         return config.GEMINI_MODELO
     if _modelo_gemini["id"]:
         return _modelo_gemini["id"]
-    preferidos = ["gemini-flash-latest", "gemini-3-flash-preview", "gemini-flash-lite-latest", "gemini-3.1-flash-lite"]
+    preferidos = ["gemini-3-flash-preview", "gemini-flash-latest", "gemini-3.1-flash-lite", "gemini-flash-lite-latest"]
     try:
         r = requests.get(f"{GEMINI}/models", headers={"x-goog-api-key": config.GEMINI_API_KEY},
                          params={"pageSize": 200}, timeout=20)
@@ -415,5 +422,5 @@ def conversar(historial: list[dict], texto: str, imagen: bytes | None, dia: dict
         except Exception as ex:                     # nunca tumbar el bot por la IA
             log.exception("IA %s falló", nombre)
             errores.append(f"{nombre}: {type(ex).__name__}")
-    return ("⚠️ Ninguna IA respondió ahora (" + "; ".join(errores)[:300] + "). "
-            "Intenta en un minuto; los botones y comandos siguen funcionando."), []
+    return ("⚠️ La IA está saturada ahora mismo (" + "; ".join(errores)[:200] + ").\n"
+            "Mientras tanto puedes usar /hoy, /plan, /escalera, /mis o /cobro 45000, que no dependen de la IA."), []

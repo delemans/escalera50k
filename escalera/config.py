@@ -50,7 +50,7 @@ GROQ_MODELO = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
 GROQ_MODELO_VISION = os.environ.get("GROQ_VISION_MODEL", "")
 GROQ_RESPALDOS = [m for m in os.environ.get("GROQ_FALLBACKS", "openai/gpt-oss-20b,qwen/qwen3.8-27b").split(",") if m]
 GEMINI_RESPALDOS = [m for m in os.environ.get(
-    "GEMINI_FALLBACKS", "gemini-3-flash-preview,gemini-flash-lite-latest,gemini-3.1-flash-lite").split(",") if m]
+    "GEMINI_FALLBACKS", "gemini-3-flash-preview,gemini-flash-latest,gemini-3.1-flash-lite,gemini-flash-lite-latest").split(",") if m]
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 OPENROUTER_MODELO = os.environ.get("OPENROUTER_MODEL", "google/gemma-4-31b-it:free")
 OPENROUTER_VISION = os.environ.get("OPENROUTER_VISION", "0") == "1"
@@ -63,7 +63,7 @@ UNIDAD_PCT = _float("UNIDAD_PCT", 0.02)
 TOPE_DIARIO_PCT = _float("TOPE_DIARIO_PCT", 0.12)
 APUESTA_MINIMA = _float("APUESTA_MINIMA", 1_000)
 BANCA_ALERTA_PCT = _float("BANCA_ALERTA_PCT", 0.70)
-AVISO_MIN_ANTES = [int(x) for x in os.environ.get("AVISO_MIN_ANTES", "60,15").split(",") if x.strip()]
+AVISO_MIN_ANTES = [int(x) for x in os.environ.get("AVISO_MIN_ANTES", "30,10").split(",") if x.strip()]
 PREGUNTAR_MIN_DESPUES = _int("PREGUNTAR_MIN_DESPUES", 5)
 RACHA_ALERTA = _int("RACHA_ALERTA", 3)
 SILENCIO = os.environ.get("SILENCIO", "23:00-06:30")   # sin recordatorios en ese horario

@@ -106,6 +106,8 @@ def cmd(texto: str, chat_id) -> bool:
         enviar_dia(dia)
     elif c == "/plan":
         tg.enviar(chat_id, M.plan(dia) or "Hoy no hay plan.")
+    elif c in ("/escalera", "/peldano", "/peldaño"):
+        tg.enviar(chat_id, M.escalera_estado(dia))
     elif c in ("/mis", "/apuestas"):
         tg.enviar(chat_id, M.mis_apuestas(dia) or "No tienes apuestas abiertas registradas.")
     elif c == "/tarjetas":
@@ -384,6 +386,9 @@ def procesar(u: dict):
         return
     if resolver_espera(chat_id, texto):
         return
+    if re.search(r"pelda[ñn]o|escalera de crecimiento|mi escalera", texto.lower()) and len(texto) < 80:
+        tg.enviar(chat_id, M.escalera_estado(sync.dia()))
+        return
     mc = re.match(r"^/?(?:cobro|cashout|cash out)\s+(\$?[\d.,]+)", texto.lower())
     if mc and F.leer_numero(mc.group(1)):
         dia = sync.dia()
@@ -449,7 +454,7 @@ def periodicas():
         log.info("Respaldo: %s", db.respaldar())
 
 
-COMANDOS = [("hoy", "Resumen y jugadas del día"), ("plan", "Qué hacer con cada jugada"), ("mis", "Tus apuestas abiertas"), ("cobro", "¿Cobrar ya? /cobro 45000"),
+COMANDOS = [("hoy", "Resumen y jugadas del día"), ("plan", "Qué hacer con cada jugada"), ("mis", "Tus apuestas abiertas"), ("escalera", "Tu escalera y el próximo peldaño"), ("cobro", "¿Cobrar ya? /cobro 45000"),
             ("tarjetas", "Tarjetas con botones"), ("banca", "Banca, unidad y tope"),
             ("saldo", "Reportar tu saldo de BetPlay"), ("stats", "Estadísticas"),
             ("riesgo", "Simulación del plan"), ("registro", "Lo registrado hoy"),
@@ -513,6 +518,8 @@ def main():
                 log.exception("Error en el bucle; reintento en 5 s")
                 panel.salud(False, "error en el bucle")
                 time.sleep(5)
+    while not web.cola.empty():                    # no perder mensajes al reiniciar
+        _procesar_seguro(web.cola.get_nowait())
     log.info("Bot apagado.")
 
 

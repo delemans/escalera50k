@@ -89,7 +89,7 @@ def test_alertas_recordatorio_y_pregunta(entorno, monkeypatch):
     primero = dia["plan"][0]
     h, m = map(int, primero["hora"].split(":"))
     base = dt.datetime.fromisoformat(dia["fecha"]).replace(tzinfo=sync.BOG)
-    monkeypatch.setattr(alertas, "ahora", lambda: base.replace(hour=h, minute=m) - dt.timedelta(minutes=58))
+    monkeypatch.setattr(alertas, "ahora", lambda: base.replace(hour=h, minute=m) - dt.timedelta(minutes=28))
     claves = [c for c, _, _ in alertas.pendientes(dia)]
     assert any(c.startswith("rec-") for c in claves)
     monkeypatch.setattr(alertas, "ahora", lambda: base.replace(hour=h, minute=m) + dt.timedelta(minutes=6))

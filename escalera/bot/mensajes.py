@@ -436,6 +436,38 @@ def metodo() -> str:
         "<i>Probabilidad no es certeza: un 70 % falla 3 de cada 10 veces.</i>"])
 
 
+def escalera_estado(dia: dict) -> str:
+    """Respuesta a «¿cuál es el peldaño 2?» / /escalera."""
+    cfg = dia.get("progresionCfg") or {}
+    if not cfg:
+        return "📈 Aún no tengo los datos de tu escalera. Llegan con el análisis de la mañana (/hoy)."
+    ec = dia.get("escaleraCrec") or {}
+    saldo, base, paso = cfg.get("saldo", 0), cfg.get("base", 0), cfg.get("paso", 1)
+    seguro = ec.get("stake") or (saldo - base if paso >= 2 and saldo > base else saldo)
+    out = [_titulo("📈", "ESCALERA DE CRECIMIENTO", f"serie #{cfg.get('reto', 1)}"), LINEA,
+           f"{barra(saldo, cfg.get('meta', 50000))} <b>{pesos(saldo)}</b> / {pesos(cfg.get('meta', 50000))}",
+           f"Próximo: <b>peldaño {paso}</b>", ""]
+    if paso >= 2 and saldo > base:
+        out += [f"🛡 Modo seguro: apuestas <b>{pesos(seguro)}</b> y apartas tu base de {pesos(base)}",
+                f"🔥 Modo agresivo: apuestas los <b>{pesos(saldo)}</b>"]
+    else:
+        out.append(f"Apuestas <b>{pesos(saldo)}</b> (la base de la serie)")
+    j = (dia.get("jugadas") or {}).get("progresion")
+    plan = next((i for i in dia.get("plan") or [] if i["tipo"] == "progresion"), None)
+    if j and plan and dia.get("fecha"):
+        x = j["patas"][0]
+        out += ["", f"🎯 <b>Pick del peldaño {paso}</b> · {e(x['t'])}", e(x["partido"]),
+                f"▸ <b>{e(x['sel'])}</b> @ {cuota(x['o'])} · mínima BetPlay <b>{cuota(plan['cuota_min'])}</b>",
+                f"{ICONO_ACCION[plan['accion']]} {TEXTO_ACCION[plan['accion']]} · prob. {pct(plan['p'])} · EV {pct(plan['ev'], True, 1)}"]
+        for a in (dia.get("porQue") or {}).get("progresion") or []:
+            out.append(f"• {e(a)}")
+    else:
+        out += ["", "🎯 El pick de este peldaño sale con el análisis de la mañana (hacia las 07:00).",
+                "Solo entran picks muy probables (cuota 1,25–1,60) que no tengan EV negativo."]
+    out += ["", "<i>Si pierde, la serie termina y empieza otra con la base. Nunca subas el monto para recuperar.</i>"]
+    return "\n".join(out)
+
+
 def ayuda() -> str:
     return "\n".join([
         _titulo("🤖", "Cómo usarme"), LINEA,
@@ -450,5 +482,6 @@ def ayuda() -> str:
         "/banca control · /saldo 100000 tu saldo real",
         "/stats estadísticas · /riesgo simulación",
         "/registro lo de hoy · /deshacer último registro",
+        "/escalera tu escalera y el próximo peldaño · /mis tus apuestas · /cobro 45000",
         "/metodo cómo decide · /silencio recordatorios de noche · /ia qué IA está activa", "",
         "<i>No apuesto ni prometo resultados: te doy probabilidad y valor esperado.</i>"])

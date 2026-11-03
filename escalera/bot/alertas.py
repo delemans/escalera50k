@@ -141,6 +141,20 @@ def pendientes(dia: dict) -> list[tuple[str, str, list | None]]:
                 if m - 6 < faltan <= m:
                     add(f"rec-{hoy}-{pid}-{m}", M.recordatorio(g["p"], m, g["roles"]))
 
+    # Recordatorio de TUS apuestas ya hechas (30 y 10 min antes)
+    if not silencio:
+        for m in dia.get("misApuestas") or []:
+            inicio = _hora(m.get("hora") or "", hoy)
+            if m.get("resultado") != "pendiente" or not inicio:
+                continue
+            faltan = (inicio - t).total_seconds() / 60
+            for mm in config.AVISO_MIN_ANTES:
+                if mm - 6 < faltan <= mm:
+                    add(f"rec-mia-{hoy}-{m.get('id')}-{mm}",
+                        f"⏰ <b>Faltan {mm} min</b> · {M.e(m.get('hora'))}\n{M.e(m.get('partido'))}\n"
+                        f"▸ Tu apuesta: <b>{M.e(m.get('seleccion'))}</b> @ {M.cuota(m.get('cuotaReal'))} · "
+                        f"{M.pesos(m.get('stakeReal'))}\n📡 Te aviso cada gol y tarjeta en vivo.")
+
     # Pregunta "¿la hiciste?" poco después del inicio de la primera pierna
     for i in plan:
         if i["accion"] == "NO":
