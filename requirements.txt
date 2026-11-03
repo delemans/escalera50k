@@ -1,0 +1,4 @@
+requests>=2.31
+anthropic>=0.40
+tzdata>=2024.1
+# opcional: faster-whisper>=1.0   (notas de voz)

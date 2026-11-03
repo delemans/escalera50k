@@ -1,0 +1,706 @@
+{
+ "dia": {
+  "fecha": "2026-11-07",
+  "fechaTexto": "Sábado 7 de noviembre de 2026",
+  "actualizado": "7 de noviembre de 2026, 07:06 (Bogotá)",
+  "partidos": 65,
+  "erroresCsv": [],
+  "validacion": [
+   {
+    "p": "1 + X + 2 = 100",
+    "r": "65 de 65",
+    "e": "Pasa",
+    "c": "good"
+   },
+   {
+    "p": "BTS + OTS = 100",
+    "r": "65 de 65",
+    "e": "Pasa",
+    "c": "good"
+   },
+   {
+    "p": "H1 + HX + H2 = 100",
+    "r": "65 de 65",
+    "e": "Pasa",
+    "c": "good"
+   },
+   {
+    "p": "O1,5 ≥ O2,5 ≥ O3,5",
+    "r": "65 de 65",
+    "e": "Pasa",
+    "c": "good"
+   },
+   {
+    "p": "TIP coherente con el resultado más probable",
+    "r": "60 de 65",
+    "e": "Aceptable (tips dobles 1X/X2/12)",
+    "c": "warn"
+   },
+   {
+    "p": "Promedio 1 / X / 2 (ref. 45/26/29)",
+    "r": "42,4 / 26,6 / 31,0",
+    "e": "Dentro del margen",
+    "c": "good"
+   },
+   {
+    "p": "Promedio O2,5 (ref. 50−55 %)",
+    "r": "58,9 %",
+    "e": "3,9 pts por encima",
+    "c": "warn"
+   },
+   {
+    "p": "Promedio BTS (ref. 50−53 %)",
+    "r": "56,0 %",
+    "e": "3,0 pts por encima",
+    "c": "warn"
+   },
+   {
+    "p": "Favoritos frente al mercado",
+    "r": "6 candidatos · 6 con cuota · 6 dentro de ±8 pts",
+    "e": "Atalanta -6,0; Real Sociedad +4,7",
+    "c": "good"
+   }
+  ],
+  "picks": [
+   {
+    "id": "2026-11-07-1",
+    "h": "Bayern Múnich",
+    "a": "Mainz",
+    "lg": "Germany - Bundesliga",
+    "t": "08:30",
+    "sel": "Gana Bayern Múnich",
+    "o": 1.33,
+    "bk": "Pinnacle",
+    "sa": 0.79,
+    "mk": 0.7512,
+    "p": 0.757,
+    "ev": 0.0069,
+    "omin": 1.347,
+    "valor": false,
+    "noticias": "Sin bajas nuevas; Kane disponible (kicker).",
+    "alerta": false,
+    "motivo": null,
+    "nCasas": 2,
+    "dispersion": 0.0047
+   },
+   {
+    "id": "2026-11-07-2",
+    "h": "Real Sociedad",
+    "a": "Alavés",
+    "lg": "Spain - LaLiga",
+    "t": "10:15",
+    "sel": "Gana Real Sociedad",
+    "o": 1.95,
+    "bk": "Pinnacle",
+    "sa": 0.55,
+    "mk": 0.5034,
+    "p": 0.5104,
+    "ev": -0.0048,
+    "omin": 1.999,
+    "valor": false,
+    "noticias": "Alavés sin su delantero titular (Marca).",
+    "alerta": false,
+    "motivo": null,
+    "nCasas": 2,
+    "dispersion": 0.0037
+   },
+   {
+    "id": "2026-11-07-3",
+    "h": "PSV",
+    "a": "Heerenveen",
+    "lg": "Netherlands - Eredivisie",
+    "t": "11:00",
+    "sel": "Gana PSV",
+    "o": 1.42,
+    "bk": "Bet365",
+    "sa": 0.72,
+    "mk": 0.6914,
+    "p": 0.6957,
+    "ev": -0.0122,
+    "omin": 1.466,
+    "valor": false,
+    "noticias": "Duda de Veerman (ESPN NL).",
+    "alerta": false,
+    "motivo": null,
+    "nCasas": 2,
+    "dispersion": 0.0045
+   },
+   {
+    "id": "2026-11-07-4",
+    "h": "Benfica",
+    "a": "Gil Vicente",
+    "lg": "Portugal - Primeira Liga",
+    "t": "13:30",
+    "sel": "Gana Benfica",
+    "o": 1.36,
+    "bk": "Pinnacle",
+    "sa": 0.75,
+    "mk": 0.7199,
+    "p": 0.7244,
+    "ev": -0.0148,
+    "omin": 1.408,
+    "valor": false,
+    "noticias": "Rotación leve (Record).",
+    "alerta": false,
+    "motivo": null,
+    "nCasas": 1,
+    "dispersion": 0.0
+   },
+   {
+    "id": "2026-11-07-5",
+    "h": "Atlético Nacional",
+    "a": "Envigado",
+    "lg": "Colombia - Primera A",
+    "t": "16:10",
+    "sel": "Gana Atlético Nacional",
+    "o": 1.48,
+    "bk": "Megapari",
+    "sa": 0.68,
+    "mk": 0.6556,
+    "p": 0.6593,
+    "ev": -0.0242,
+    "omin": 1.547,
+    "valor": false,
+    "noticias": "Sin novedades (Futbolred).",
+    "alerta": false,
+    "motivo": null,
+    "nCasas": 1,
+    "dispersion": 0.0
+   },
+   {
+    "id": null,
+    "h": "Atalanta",
+    "a": "Parma",
+    "lg": "Italy - Serie A",
+    "t": "14:45",
+    "sel": "Gana Atalanta",
+    "o": 1.5,
+    "bk": "BC.Game",
+    "sa": 0.59,
+    "mk": 0.6496,
+    "p": 0.6407,
+    "ev": -0.0389,
+    "omin": 1.592,
+    "valor": false,
+    "noticias": "8 bajas (Starting11).",
+    "alerta": true,
+    "motivo": "Vetado por noticias",
+    "nCasas": 1,
+    "dispersion": 0.0
+   }
+  ],
+  "jugadas": {
+   "sencillas": {
+    "stake": 3000,
+    "ids": [
+     "2026-11-07-1",
+     "2026-11-07-2",
+     "2026-11-07-3",
+     "2026-11-07-4",
+     "2026-11-07-5"
+    ]
+   },
+   "escalera": {
+    "tipo": "escalera",
+    "stake": 5000,
+    "patas": [
+     {
+      "id": "2026-11-07-1",
+      "sel": "Gana Bayern Múnich",
+      "partido": "Bayern Múnich vs Mainz",
+      "t": "08:30",
+      "lg": "Germany - Bundesliga",
+      "o": 1.33
+     },
+     {
+      "id": "2026-11-07-3",
+      "sel": "Gana PSV",
+      "partido": "PSV vs Heerenveen",
+      "t": "11:00",
+      "lg": "Netherlands - Eredivisie",
+      "o": 1.42
+     },
+     {
+      "id": "2026-11-07-4",
+      "sel": "Gana Benfica",
+      "partido": "Benfica vs Gil Vicente",
+      "t": "13:30",
+      "lg": "Portugal - Primeira Liga",
+      "o": 1.36
+     }
+    ],
+    "P": 0.3815,
+    "ev": -0.0123,
+    "final": 11042,
+    "montos": [
+     5000,
+     6650,
+     4443
+    ],
+    "id": "2026-11-07-esc"
+   },
+   "progresion": {
+    "tipo": "progresion",
+    "reto": 1,
+    "paso": 3,
+    "saldo": 10875,
+    "base": 5000,
+    "meta": 50000,
+    "stake": 10875,
+    "patas": [
+     {
+      "id": "2026-11-07-1",
+      "sel": "Gana Bayern Múnich",
+      "partido": "Bayern Múnich vs Mainz",
+      "t": "08:30",
+      "lg": "Germany - Bundesliga",
+      "o": 1.33
+     }
+    ],
+    "P": 0.757,
+    "ev": 0.0068,
+    "Pmeta": 0.1882,
+    "pasosFaltan": 6,
+    "id": "2026-11-07-prog"
+   },
+   "combinada": {
+    "tipo": "combinada",
+    "stake": 3000,
+    "patas": [
+     {
+      "id": "2026-11-07-1",
+      "sel": "Gana Bayern Múnich",
+      "partido": "Bayern Múnich vs Mainz",
+      "t": "08:30",
+      "lg": "Germany - Bundesliga",
+      "o": 1.33
+     },
+     {
+      "id": "2026-11-07-3",
+      "sel": "Gana PSV",
+      "partido": "PSV vs Heerenveen",
+      "t": "11:00",
+      "lg": "Netherlands - Eredivisie",
+      "o": 1.42
+     },
+     {
+      "id": "2026-11-07-4",
+      "sel": "Gana Benfica",
+      "partido": "Benfica vs Gil Vicente",
+      "t": "13:30",
+      "lg": "Portugal - Primeira Liga",
+      "o": 1.36
+     }
+    ],
+    "cuota": 2.568,
+    "P": 0.3815,
+    "ev": -0.0201,
+    "omin": 2.674,
+    "id": "2026-11-07-combi"
+   },
+   "super": null
+  },
+  "bancas": {
+   "sistema": 90000,
+   "real": 100000
+  },
+  "semaforo": {
+   "c": "warn",
+   "t": "Aún sin jugadas liquidadas en los últimos 7 días."
+  },
+  "progresionCfg": {
+   "activo": true,
+   "reto": 1,
+   "paso": 3,
+   "saldo": 10875,
+   "base": 5000,
+   "meta": 50000,
+   "historial": []
+  },
+  "sitio": "https://claude.ai/artifact/9iFSG3bVbk7GZZCJKfxMoa",
+  "publicacion": "manana",
+  "plan": [
+   {
+    "id": "2026-11-07-1",
+    "tipo": "sencilla",
+    "titulo": "1 · Gana Bayern Múnich",
+    "accion": "VIGILAR",
+    "monto": 0,
+    "cuota_ref": 1.33,
+    "cuota_min": 1.347,
+    "p": 0.757,
+    "ev": 0.0069,
+    "razon": "Casi justa: solo si BetPlay paga la mínima.",
+    "hora": "08:30"
+   },
+   {
+    "id": "2026-11-07-esc",
+    "tipo": "escalera",
+    "titulo": "Escalera",
+    "accion": "VIGILAR",
+    "monto": 0,
+    "cuota_ref": 2.568,
+    "cuota_min": 2.674,
+    "p": 0.3815,
+    "ev": -0.0123,
+    "razon": "Multi: todas las piernas deben ganar.",
+    "hora": "08:30"
+   },
+   {
+    "id": "2026-11-07-combi",
+    "tipo": "combinada",
+    "titulo": "Combinada",
+    "accion": "VIGILAR",
+    "monto": 0,
+    "cuota_ref": 2.568,
+    "cuota_min": 2.674,
+    "p": 0.3815,
+    "ev": -0.0201,
+    "razon": "Multi: todas las piernas deben ganar.",
+    "hora": "08:30"
+   },
+   {
+    "id": "2026-11-07-prog",
+    "tipo": "progresion",
+    "titulo": "Progresión · paso 3",
+    "accion": "VIGILAR",
+    "monto": 0,
+    "cuota_ref": 1.33,
+    "cuota_min": 1.347,
+    "p": 0.757,
+    "ev": 0.0068,
+    "razon": "Reto aparte: usa solo el saldo de la progresión.",
+    "hora": "08:30"
+   },
+   {
+    "id": "2026-11-07-2",
+    "tipo": "sencilla",
+    "titulo": "2 · Gana Real Sociedad",
+    "accion": "VIGILAR",
+    "monto": 0,
+    "cuota_ref": 1.95,
+    "cuota_min": 1.999,
+    "p": 0.5104,
+    "ev": -0.0048,
+    "razon": "Casi justa: solo si BetPlay paga la mínima.",
+    "hora": "10:15"
+   },
+   {
+    "id": "2026-11-07-3",
+    "tipo": "sencilla",
+    "titulo": "3 · Gana PSV",
+    "accion": "VIGILAR",
+    "monto": 0,
+    "cuota_ref": 1.42,
+    "cuota_min": 1.466,
+    "p": 0.6957,
+    "ev": -0.0122,
+    "razon": "Casi justa: solo si BetPlay paga la mínima.",
+    "hora": "11:00"
+   },
+   {
+    "id": "2026-11-07-4",
+    "tipo": "sencilla",
+    "titulo": "4 · Gana Benfica",
+    "accion": "VIGILAR",
+    "monto": 0,
+    "cuota_ref": 1.36,
+    "cuota_min": 1.408,
+    "p": 0.7244,
+    "ev": -0.0148,
+    "razon": "Casi justa: solo si BetPlay paga la mínima.",
+    "hora": "13:30"
+   },
+   {
+    "id": "2026-11-07-5",
+    "tipo": "sencilla",
+    "titulo": "5 · Gana Atlético Nacional",
+    "accion": "VIGILAR",
+    "monto": 0,
+    "cuota_ref": 1.48,
+    "cuota_min": 1.547,
+    "p": 0.6593,
+    "ev": -0.0242,
+    "razon": "Casi justa: solo si BetPlay paga la mínima.",
+    "hora": "16:10"
+   }
+  ],
+  "politica": {
+   "banca": 100000,
+   "unidad": 2000.0,
+   "tope": 12000.0,
+   "freno": false
+  },
+  "simulacion": {
+   "n": 0
+  },
+  "estadisticas": {
+   "sistema": {
+    "n": 0
+   },
+   "real": {
+    "n": 0
+   }
+  },
+  "veredicto": {
+   "titulo": "Sábado en modo papel",
+   "texto": "Ninguna jugada tiene EV positivo con la cuota de referencia. 8 quedan en vigilancia: apuesta solo si BetPlay paga la cuota mínima (mándame la cuota y te confirmo).",
+   "chips": [
+    {
+     "t": "0 apostar",
+     "c": "bad"
+    },
+    {
+     "t": "8 vigilar",
+     "c": "warn"
+    }
+   ]
+  },
+  "alertas": []
+ },
+ "apuestasNuevas": [
+  {
+   "simulada": true,
+   "real": false,
+   "resultado": "pendiente",
+   "cuotaReal": null,
+   "stakeReal": null,
+   "fuenteReal": null,
+   "netoReal": null,
+   "marcador": "",
+   "creado": 1794000000000,
+   "id": "2026-11-07-1",
+   "tipo": "sencilla",
+   "fecha": "2026-11-07",
+   "hora": "08:30",
+   "partido": "Bayern Múnich vs Mainz",
+   "seleccion": "Gana Bayern Múnich",
+   "liga": "Germany - Bundesliga",
+   "cuotaRef": 1.33,
+   "bk": "Pinnacle",
+   "p": 0.757,
+   "mk": 0.7512,
+   "sa": 0.79,
+   "ev": 0.0069,
+   "stake": 3000
+  },
+  {
+   "simulada": true,
+   "real": false,
+   "resultado": "pendiente",
+   "cuotaReal": null,
+   "stakeReal": null,
+   "fuenteReal": null,
+   "netoReal": null,
+   "marcador": "",
+   "creado": 1794000000001,
+   "id": "2026-11-07-2",
+   "tipo": "sencilla",
+   "fecha": "2026-11-07",
+   "hora": "10:15",
+   "partido": "Real Sociedad vs Alavés",
+   "seleccion": "Gana Real Sociedad",
+   "liga": "Spain - LaLiga",
+   "cuotaRef": 1.95,
+   "bk": "Pinnacle",
+   "p": 0.5104,
+   "mk": 0.5034,
+   "sa": 0.55,
+   "ev": -0.0048,
+   "stake": 3000
+  },
+  {
+   "simulada": true,
+   "real": false,
+   "resultado": "pendiente",
+   "cuotaReal": null,
+   "stakeReal": null,
+   "fuenteReal": null,
+   "netoReal": null,
+   "marcador": "",
+   "creado": 1794000000002,
+   "id": "2026-11-07-3",
+   "tipo": "sencilla",
+   "fecha": "2026-11-07",
+   "hora": "11:00",
+   "partido": "PSV vs Heerenveen",
+   "seleccion": "Gana PSV",
+   "liga": "Netherlands - Eredivisie",
+   "cuotaRef": 1.42,
+   "bk": "Bet365",
+   "p": 0.6957,
+   "mk": 0.6914,
+   "sa": 0.72,
+   "ev": -0.0122,
+   "stake": 3000
+  },
+  {
+   "simulada": true,
+   "real": false,
+   "resultado": "pendiente",
+   "cuotaReal": null,
+   "stakeReal": null,
+   "fuenteReal": null,
+   "netoReal": null,
+   "marcador": "",
+   "creado": 1794000000003,
+   "id": "2026-11-07-4",
+   "tipo": "sencilla",
+   "fecha": "2026-11-07",
+   "hora": "13:30",
+   "partido": "Benfica vs Gil Vicente",
+   "seleccion": "Gana Benfica",
+   "liga": "Portugal - Primeira Liga",
+   "cuotaRef": 1.36,
+   "bk": "Pinnacle",
+   "p": 0.7244,
+   "mk": 0.7199,
+   "sa": 0.75,
+   "ev": -0.0148,
+   "stake": 3000
+  },
+  {
+   "simulada": true,
+   "real": false,
+   "resultado": "pendiente",
+   "cuotaReal": null,
+   "stakeReal": null,
+   "fuenteReal": null,
+   "netoReal": null,
+   "marcador": "",
+   "creado": 1794000000004,
+   "id": "2026-11-07-5",
+   "tipo": "sencilla",
+   "fecha": "2026-11-07",
+   "hora": "16:10",
+   "partido": "Atlético Nacional vs Envigado",
+   "seleccion": "Gana Atlético Nacional",
+   "liga": "Colombia - Primera A",
+   "cuotaRef": 1.48,
+   "bk": "Megapari",
+   "p": 0.6593,
+   "mk": 0.6556,
+   "sa": 0.68,
+   "ev": -0.0242,
+   "stake": 3000
+  },
+  {
+   "simulada": true,
+   "real": false,
+   "resultado": "pendiente",
+   "cuotaReal": null,
+   "stakeReal": null,
+   "fuenteReal": null,
+   "netoReal": null,
+   "marcador": "",
+   "creado": 1794000000015,
+   "id": "2026-11-07-esc",
+   "tipo": "escalera",
+   "fecha": "2026-11-07",
+   "hora": "08:30",
+   "partido": "Escalera: Bayern Múnich + PSV + Benfica",
+   "seleccion": "Bayern Múnich + PSV + Benfica",
+   "piernas": [
+    {
+     "id": "2026-11-07-1",
+     "sel": "Gana Bayern Múnich",
+     "partido": "Bayern Múnich vs Mainz",
+     "t": "08:30",
+     "o": 1.33
+    },
+    {
+     "id": "2026-11-07-3",
+     "sel": "Gana PSV",
+     "partido": "PSV vs Heerenveen",
+     "t": "11:00",
+     "o": 1.42
+    },
+    {
+     "id": "2026-11-07-4",
+     "sel": "Gana Benfica",
+     "partido": "Benfica vs Gil Vicente",
+     "t": "13:30",
+     "o": 1.36
+    }
+   ],
+   "cuotaRef": 2.568,
+   "p": 0.3815,
+   "ev": -0.0123,
+   "stake": 5000
+  },
+  {
+   "simulada": true,
+   "real": false,
+   "resultado": "pendiente",
+   "cuotaReal": null,
+   "stakeReal": null,
+   "fuenteReal": null,
+   "netoReal": null,
+   "marcador": "",
+   "creado": 1794000000016,
+   "id": "2026-11-07-prog",
+   "tipo": "progresion",
+   "fecha": "2026-11-07",
+   "hora": "08:30",
+   "partido": "Progresion: Bayern Múnich",
+   "seleccion": "Bayern Múnich",
+   "piernas": [
+    {
+     "id": "2026-11-07-1",
+     "sel": "Gana Bayern Múnich",
+     "partido": "Bayern Múnich vs Mainz",
+     "t": "08:30",
+     "o": 1.33
+    }
+   ],
+   "cuotaRef": 1.33,
+   "p": 0.757,
+   "ev": 0.0068,
+   "stake": 10875
+  },
+  {
+   "simulada": true,
+   "real": false,
+   "resultado": "pendiente",
+   "cuotaReal": null,
+   "stakeReal": null,
+   "fuenteReal": null,
+   "netoReal": null,
+   "marcador": "",
+   "creado": 1794000000017,
+   "id": "2026-11-07-combi",
+   "tipo": "combinada",
+   "fecha": "2026-11-07",
+   "hora": "08:30",
+   "partido": "Combinada: Bayern Múnich + PSV + Benfica",
+   "seleccion": "Bayern Múnich + PSV + Benfica",
+   "piernas": [
+    {
+     "id": "2026-11-07-1",
+     "sel": "Gana Bayern Múnich",
+     "partido": "Bayern Múnich vs Mainz",
+     "t": "08:30",
+     "o": 1.33
+    },
+    {
+     "id": "2026-11-07-3",
+     "sel": "Gana PSV",
+     "partido": "PSV vs Heerenveen",
+     "t": "11:00",
+     "o": 1.42
+    },
+    {
+     "id": "2026-11-07-4",
+     "sel": "Gana Benfica",
+     "partido": "Benfica vs Gil Vicente",
+     "t": "13:30",
+     "o": 1.36
+    }
+   ],
+   "cuotaRef": 2.568,
+   "p": 0.3815,
+   "ev": -0.0201,
+   "stake": 3000
+  }
+ ]
+}

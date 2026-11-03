@@ -1,0 +1,32 @@
+# docker compose up -d   →  bot + panel web con HTTPS automático en tu dominio
+services:
+  bot:
+    build:
+      context: .
+      args:
+        VOZ: "${VOZ:-0}"
+    image: escalera50k-bot
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./datos:/datos
+    logging:
+      driver: json-file
+      options: { max-size: "5m", max-file: "3" }
+
+  web:
+    image: caddy:2.8
+    restart: unless-stopped
+    depends_on: [bot]
+    ports: ["80:80", "443:443"]
+    environment:
+      DOMINIO: "${DOMINIO}"
+      PANEL_USUARIO: "${PANEL_USUARIO:-admin}"
+      PANEL_HASH: "${PANEL_HASH}"
+    volumes:
+      - ./despliegue/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./datos/panel:/srv/panel:ro
+      - caddy_data:/data
+
+volumes:
+  caddy_data:

@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "escalera50k"
+version = "2.0.0"
+description = "Mesa de análisis de apuestas por valor esperado + bot de Telegram (open source, sin promesas)."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = ["requests>=2.31", "anthropic>=0.40", "tzdata>=2024.1"]
+
+[project.optional-dependencies]
+voz = ["faster-whisper>=1.0"]
+dev = ["pytest>=8", "ruff>=0.6", "scipy>=1.11"]
+
+[project.scripts]
+escalera = "escalera.cli:main"
+escalera-bot = "escalera.bot.app:main"
+
+[tool.setuptools.packages.find]
+include = ["escalera*"]
+
+[tool.ruff]
+line-length = 130
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E9", "F", "B"]
+ignore = ["B008"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

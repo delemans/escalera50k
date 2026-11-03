@@ -1,0 +1,23 @@
+# HTTPS automático (Let's Encrypt) para tu dominio. Apunta un registro A de DOMINIO a la IP del servidor.
+{$DOMINIO} {
+	encode gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy no-referrer
+	}
+	# Salud pública (para monitores tipo UptimeRobot)
+	handle /salud.json {
+		root * /srv/panel
+		file_server
+	}
+	# Panel privado con usuario y clave
+	handle {
+		basic_auth {
+			{$PANEL_USUARIO} {$PANEL_HASH}
+		}
+		root * /srv/panel
+		file_server
+	}
+}

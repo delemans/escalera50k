@@ -1,0 +1,20 @@
+{"fecha":"2026-11-07","actualizado":"7 de noviembre de 2026, 07:06 (Bogotá)","creadoMs":1794000000000,
+ "sitio":"https://claude.ai/artifact/9iFSG3bVbk7GZZCJKfxMoa",
+ "statarea_csv":"ejemplos/statarea_ejemplo.csv",
+ "banca":{"inicial":90000,"inicialReal":100000,"stakes":{"sencilla":3000,"escalera":5000,"progresion":5000,"combinada":3000,"super":1500}},
+ "progresion":{"activo":true,"reto":1,"paso":3,"saldo":10875,"base":5000,"meta":50000,"historial":[]},
+ "candidatos":[
+  {"h":"Bayern Múnich","a":"Mainz","lg":"Germany - Bundesliga","t":"08:30","lado":"1","sel":"Gana Bayern Múnich","sa":0.79,
+   "casas":[{"bk":"Pinnacle","o":[1.33,6.2,9.5]},{"bk":"Bet365","o":[1.30,6.0,9.0]}],"noticias":"Sin bajas nuevas; Kane disponible (kicker).","alerta":false},
+  {"h":"Real Sociedad","a":"Alavés","lg":"Spain - LaLiga","t":"10:15","lado":"1","sel":"Gana Real Sociedad","sa":0.55,
+   "casas":[{"bk":"Pinnacle","o":[1.95,3.4,4.3]},{"bk":"Bet365","o":[1.90,3.4,4.2]}],"noticias":"Alavés sin su delantero titular (Marca).","alerta":false},
+  {"h":"PSV","a":"Heerenveen","lg":"Netherlands - Eredivisie","t":"11:00","lado":"1","sel":"Gana PSV","sa":0.72,
+   "casas":[{"bk":"Bet365","o":[1.42,5.0,6.5]},{"bk":"Unibet","o":[1.40,5.0,6.75]}],"noticias":"Duda de Veerman (ESPN NL).","alerta":false},
+  {"h":"Benfica","a":"Gil Vicente","lg":"Portugal - Primeira Liga","t":"13:30","lado":"1","sel":"Gana Benfica","sa":0.75,
+   "casas":[{"bk":"Pinnacle","o":[1.36,5.2,8.0]}],"noticias":"Rotación leve (Record).","alerta":false},
+  {"h":"Atlético Nacional","a":"Envigado","lg":"Colombia - Primera A","t":"16:10","lado":"1","sel":"Gana Atlético Nacional","sa":0.68,
+   "casas":[{"bk":"Megapari","o":[1.48,4.2,6.6]}],"noticias":"Sin novedades (Futbolred).","alerta":false},
+  {"h":"Atalanta","a":"Parma","lg":"Italy - Serie A","t":"14:45","lado":"1","sel":"Gana Atalanta","sa":0.59,
+   "casas":[{"bk":"BC.Game","o":[1.50,4.4,6.2]}],"noticias":"8 bajas (Starting11).","alerta":true}
+ ],
+ "apuestas":[]}
