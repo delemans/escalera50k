@@ -8,7 +8,8 @@ Límites del plan gratis y cómo los resolvemos:
 | Se duerme tras 15 min sin visitas | Un «ping» gratis cada 10 min (cron-job.org) lo mantiene despierto; además Telegram lo despierta con cada mensaje (webhook) |
 | El disco se borra al reiniciar | El bot guarda su estado en los mensajes fijados de Telegram y lo recupera solo al arrancar |
 | 750 h al mes | Alcanza para 1 servicio encendido todo el mes (744 h) |
-| 512 MB de RAM | Suficiente; las notas de voz no se transcriben (manda texto o pantallazo) |
+| 512 MB de RAM | Suficiente; las notas de voz se transcriben con Groq o Gemini (gratis) |
+| IA de pago | No hace falta: Gemini gratis → Groq gratis → OpenRouter gratis, en ese orden |
 
 ## 1. Sube los archivos nuevos a GitHub
 En `github.com/Delemans/escalera50k` → **Add file → Upload files** → arrastra desde la carpeta `escalera50k-v3`:
@@ -22,7 +23,8 @@ En `github.com/Delemans/escalera50k` → **Add file → Upload files** → arras
 2. **New → Blueprint** → autoriza el repositorio **escalera50k** → **Connect**.
 3. Render lee `render.yaml` y te pide 5 valores:
    - `TOKEN_BOT`: el token de tu bot
-   - `ANTHROPIC_API_KEY`: tu clave de Claude
+   - `GEMINI_API_KEY`: clave **gratis** de Google (aistudio.google.com → **Get API key → Create API key**)
+   - `GROQ_API_KEY` (opcional): clave **gratis** de console.groq.com → API Keys (respaldo si Gemini se queda sin cuota y transcribe notas de voz)
    - `PANEL_CLAVE`: una clave que inventes para el panel
    - `CHAT_ID` y `CANAL_DATOS`: **déjalos vacíos por ahora**
 4. **Apply**. En 3–5 minutos aparece **Live** y una dirección tipo `https://escalera50k-xxxx.onrender.com`.

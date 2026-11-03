@@ -128,7 +128,7 @@ python ejemplos/vista_previa.py             # así se ven los mensajes
 | Servidor Oracle Always Free | $0 |
 | Telegram, GitHub, Caddy, SQLite | $0 |
 | Dominio | el que ya tienes |
-| API de Claude (chat y pantallazos) | por uso; depende de cuánto converses (revisa la tarifa en console.anthropic.com) |
+| IA del chat y pantallazos | $0 con Gemini (Google AI Studio) y Groq en plan gratis; Claude es opcional y de pago |
 
 ## Juego responsable
 

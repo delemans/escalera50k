@@ -147,6 +147,8 @@ def cmd(texto: str, chat_id) -> bool:
         off = not db.get("silencio_off", False)
         db.put("silencio_off", off)
         tg.enviar(chat_id, "🔔 Recordatorios también de noche." if off else f"🔕 Silencio nocturno activo ({config.SILENCIO}).")
+    elif c == "/ia":
+        tg.enviar(chat_id, "🤖 " + M.e(ia.estado()))
     elif c == "/id":
         tg.enviar(chat_id, f"<code>{chat_id}</code>")
     else:
@@ -372,7 +374,7 @@ def procesar(u: dict):
         crudo = tg.descargar(a["file_id"]) or b""
         t = voz.transcribir(crudo) if crudo else None
         if t is None:
-            tg.enviar(chat_id, "🎙 No pude transcribir la nota de voz (falta faster-whisper en el servidor). Escríbemelo.")
+            tg.enviar(chat_id, "🎙 No pude transcribir la nota de voz (agrega GEMINI_API_KEY o GROQ_API_KEY). Escríbemelo.")
             return
         tg.enviar(chat_id, f"🎙 Entendí: «{M.e(t)}»")
         texto = t
@@ -437,7 +439,8 @@ COMANDOS = [("hoy", "Resumen y jugadas del día"), ("plan", "Qué hacer con cada
             ("saldo", "Reportar tu saldo de BetPlay"), ("stats", "Estadísticas"),
             ("riesgo", "Simulación del plan"), ("registro", "Lo registrado hoy"),
             ("deshacer", "Borrar el último registro"), ("metodo", "Cómo decide el sistema"),
-            ("silencio", "Recordatorios de noche sí/no"), ("ayuda", "Cómo usar el bot")]
+            ("silencio", "Recordatorios de noche sí/no"), ("ia", "Qué IA está activa"),
+            ("ayuda", "Cómo usar el bot")]
 
 
 def _procesar_seguro(u):

@@ -357,5 +357,5 @@ def ayuda() -> str:
         "/banca control · /saldo 100000 tu saldo real",
         "/stats estadísticas · /riesgo simulación",
         "/registro lo de hoy · /deshacer último registro",
-        "/metodo cómo decide · /silencio activa o quita recordatorios", "",
+        "/metodo cómo decide · /silencio recordatorios de noche · /ia qué IA está activa", "",
         "<i>No apuesto ni prometo resultados: te doy probabilidad y valor esperado.</i>"])

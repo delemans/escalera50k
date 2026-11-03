@@ -9,7 +9,7 @@ description = "Mesa de análisis de apuestas por valor esperado + bot de Telegra
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-dependencies = ["requests>=2.31", "anthropic>=0.40", "tzdata>=2024.1"]
+dependencies = ["requests>=2.31", "tzdata>=2024.1"]
 
 [project.optional-dependencies]
 voz = ["faster-whisper>=1.0"]

@@ -17,11 +17,13 @@ services:
         value: /tmp/escalera
       - key: BANCA_INICIAL
         value: "100000"
-      - key: CLAUDE_MODEL
-        value: claude-sonnet-4-5
+      - key: IA_ORDEN
+        value: gemini,groq,openrouter,anthropic
       - key: TOKEN_BOT
         sync: false
-      - key: ANTHROPIC_API_KEY
+      - key: GEMINI_API_KEY        # gratis: aistudio.google.com → Get API key
+        sync: false
+      - key: GROQ_API_KEY          # opcional, gratis: console.groq.com → API Keys (respaldo y voz)
         sync: false
       - key: PANEL_CLAVE
         sync: false
