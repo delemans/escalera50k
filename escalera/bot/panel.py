@@ -55,7 +55,7 @@ def token_valido(t: str | None) -> bool:
 
 def url_app(chat) -> str | None:
     base = (config.URL_PUBLICA or (f"https://{config.DOMINIO}" if config.DOMINIO else "")).rstrip("/")
-    return f"{base}/app?t={token_app(chat)}" if base else None
+    return f"{base}/app?t={token_app(chat)}&v={int(time.time()) // 3600}" if base else None
 
 
 # ---------------------------------------------------------------------------
@@ -162,16 +162,12 @@ def generar(dia: dict) -> None:
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800;900&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap">
 <style>
-:root{{--bg:#0A0A0B;--surface:#141416;--surface-2:#1C1C20;--ink:#F2F2F3;--muted:#A0A0A8;--line:#2A2A30;
---c-esc:#FF3B3B;--c-v2:#22C98A;--c-sue:#4D9BFF;--c-comb:#A970FF;--accent:#FF1A1A;--accent-soft:rgba(255,26,26,.14);
---ok:#2FD98B;--ok-soft:rgba(47,217,139,.14);--warn:#FFC23D;--warn-soft:rgba(255,194,61,.14);--risk:#FF6B6B;--info:#9AA4B8;
---glow:radial-gradient(60% 90% at 100% 0%,rgba(255,26,26,.28),transparent 60%);--shadow:0 20px 44px -26px rgba(0,0,0,.75);
+:root{{--bg:#F5F4F4;--surface:#FFFFFF;--surface-2:#F0EEEE;--ink:#121214;--muted:#5C5C66;--line:#E3E0E0;
+--c-esc:#D90000;--c-v2:#0A8F5F;--c-sue:#1F6FD6;--c-comb:#7A3FD9;--accent:#E00000;--accent-soft:rgba(224,0,0,.08);
+--ok:#0A8F5F;--ok-soft:rgba(10,143,95,.1);--warn:#B37A00;--warn-soft:rgba(255,190,60,.18);--risk:#FF6B6B;--info:#9AA4B8;
+--glow:radial-gradient(60% 90% at 100% 0%,rgba(255,0,0,.10),transparent 60%);--shadow:0 18px 40px -28px rgba(0,0,0,.35);
 --f-display:"Montserrat","Segoe UI",system-ui,sans-serif;--f-body:"Inter","Segoe UI",system-ui,sans-serif;
---f-mono:"JetBrains Mono",ui-monospace,Consolas,monospace;--radius:16px;color-scheme:dark}}
-@media (prefers-color-scheme:light){{:root{{--bg:#F5F4F4;--surface:#FFFFFF;--surface-2:#F0EEEE;--ink:#121214;--muted:#5C5C66;
---line:#E3E0E0;--c-esc:#D90000;--c-v2:#0A8F5F;--c-sue:#1F6FD6;--c-comb:#7A3FD9;--accent:#E00000;--accent-soft:rgba(224,0,0,.08);
---ok:#0A8F5F;--ok-soft:rgba(10,143,95,.1);--warn:#B37A00;--warn-soft:rgba(255,190,60,.18);
---glow:radial-gradient(60% 90% at 100% 0%,rgba(255,0,0,.10),transparent 60%);--shadow:0 18px 40px -28px rgba(0,0,0,.35);color-scheme:light}}}}
+--f-mono:"JetBrains Mono",ui-monospace,Consolas,monospace;--radius:16px;color-scheme:light}}
 *{{box-sizing:border-box}}body{{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 var(--f-body);-webkit-font-smoothing:antialiased}}
 h1,h2,h3{{font-family:var(--f-display);margin:0;line-height:1.12}}h1{{font-size:clamp(1.7rem,7vw,2.4rem);font-weight:900;letter-spacing:-.02em}}
 h1 span{{color:var(--accent)}}h2{{font-size:1.05rem;font-weight:800;letter-spacing:-.01em}}h3{{font-size:1rem;font-weight:800}}
