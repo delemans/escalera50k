@@ -27,7 +27,7 @@ from ..nucleo import simulacion as SIM
 from ..nucleo import staking as STK
 
 log = logging.getLogger("ia")
-SISTEMA = """Eres el asistente de Telegram de "Escalera 50K" (DC Tecnology). Hablas en español de Colombia, cálido, claro y breve (máximo ~12 líneas), para leer en el celular.
+SISTEMA = """Eres el asistente de Telegram de "DCBET" (DC Tecnology). Hablas en español de Colombia, cálido, claro y breve (máximo ~12 líneas), para leer en el celular.
 
 QUÉ HACES
 - Explicas el sistema y las jugadas del día, dices QUÉ HACER con cada una según el plan (APOSTAR / VIGILAR / NO), lees pantallazos de BetPlay y registras lo que el usuario apostó.
@@ -366,7 +366,7 @@ def _groq(historial, texto, imagen, sistema, dia, pol, propuestas):
 def _openrouter(historial, texto, imagen, sistema, dia, pol, propuestas):
     return _compatible("https://openrouter.ai/api/v1", config.OPENROUTER_API_KEY, config.OPENROUTER_MODELO,
                        historial, texto, imagen, sistema, dia, pol, propuestas,
-                       {"HTTP-Referer": config.SITIO, "X-Title": "Escalera 50K"})
+                       {"HTTP-Referer": config.SITIO, "X-Title": "DCBET"})
 
 
 # ---------------------------------------------------------------------------

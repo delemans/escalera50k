@@ -75,7 +75,7 @@ class Manejador(BaseHTTPRequestHandler):
         if ruta in ("/", "/index.html"):
             if not _autorizado(self.headers.get("Authorization")):
                 return self._responder(401, "Clave requerida".encode(), extra={
-                    "WWW-Authenticate": 'Basic realm="Escalera 50K", charset="UTF-8"'})
+                    "WWW-Authenticate": 'Basic realm="DCBET", charset="UTF-8"'})
             f = config.PANEL / "index.html"
             cuerpo = f.read_bytes() if f.exists() else "Panel aún sin generar.".encode()
             return self._responder(200, cuerpo, "text/html; charset=utf-8", {"Cache-Control": "no-store"})

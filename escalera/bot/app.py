@@ -190,7 +190,8 @@ def cmd(texto: str, chat_id) -> bool:
             tg.enviar(chat_id, "No encontré ese observador. Mira /observadores.")
     elif c == "/app":
         b = boton_app()
-        tg.enviar(chat_id, "📱 <b>Tu app</b>: plan, boletos, tus apuestas, escalera y métricas en el celular."
+        tg.enviar(chat_id, f"📱 <b>App DCBET</b>: plan, boletos, tus apuestas, escalera y métricas.\n"
+                           f"🌐 Sitio: {M.e(config.SITIO)}"
                   if b else "Aún no tengo la dirección pública del servidor.", b)
         poner_menu_app()
     elif c == "/boletos":
@@ -588,6 +589,10 @@ def main():
         raise SystemExit("Falta TOKEN_BOT (variables de entorno o archivo .env).")
     signal.signal(signal.SIGTERM, lambda *_: _apagar.__setitem__(0, True))
     tg.llamar("setMyCommands", commands=[{"command": c, "description": d} for c, d in COMANDOS])
+    if (tg.llamar("getMyName", reintentos=1) or {}).get("name") != config.BOT_NOMBRE:
+        tg.llamar("setMyName", name=config.BOT_NOMBRE, reintentos=1)
+        tg.llamar("setMyShortDescription", short_description="DCBET · picks por valor esperado, escaleras y avisos en vivo. +18",
+                  reintentos=1)
     if config.EFIMERO:
         sync.restaurar()
     try:

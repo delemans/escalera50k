@@ -47,7 +47,7 @@ def resumen(dia: dict, banca_real: float | None = None) -> str:
     v = dia.get("veredicto", {})
     b = dia.get("bancas", {})
     pol = dia.get("politica", {})
-    out = ["🪜 <b>ESCALERA 50K · DC TECNOLOGY</b>",
+    out = ["🔴 <b>DCBET</b> · DC Tecnology",
            f"📅 {e(fecha_corta(dia['fecha']))} · <i>{e(dia.get('actualizado', ''))}</i>", LINEA]
     out += _alertas(dia, ("rojo",))
     out += [f"<b>{e(v.get('titulo', ''))}</b>", e(v.get("texto", "")), ""]
@@ -100,8 +100,9 @@ def resumen(dia: dict, banca_real: float | None = None) -> str:
         out += [f"🧾 Tienes <b>{len(mias)}</b> apuestas abiertas por {pesos(sum(m.get('stakeReal') or 0 for m in mias))} (detalle abajo).", ""]
     out += [LINEA, "Abajo: el plan, tus apuestas y una tarjeta por jugada con su análisis.",
             "📸 Pantallazo · 🎙 voz · ✍️ «hice 1 y 3» · 💬 pregúntame"]
-    if dia.get("sitio"):
-        out.append(f"🌐 <a href=\"{e(dia['sitio'])}\">Ver el sitio</a>")
+    from .. import config as _cfg
+    if _cfg.SITIO:
+        out.append(f"🌐 <a href=\"{e(_cfg.SITIO)}\">Sitio DCBET</a> · 📱 /app para abrir la app")
     return "\n".join(out)
 
 

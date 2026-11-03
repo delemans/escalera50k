@@ -78,7 +78,7 @@ def publicar_dia(dia: dict) -> list[str]:
     if CANAL_PUBLICO and item:
         j = p.get("justificacion") or {}
         txt = "\n".join([
-            "🆓 <b>PICK GRATIS DEL DÍA</b> · Escalera 50K", "━━━━━━━━━━━━━━━━",
+            "🆓 <b>PICK GRATIS DEL DÍA</b> · DCBET", "━━━━━━━━━━━━━━━━",
             f"⚽ <b>{e(p.get('h'))} vs {e(p.get('a'))}</b>", f"🏆 {e(p.get('lg'))} · ⏱ {e(p.get('t'))} (hora Colombia)",
             f"▸ <b>{e(p.get('sel'))}</b> · cuota ref {cuota(p.get('o'))}",
             f"Prob. {pct(p.get('p'))} · EV {pct(p.get('ev'), True, 1)} · confianza {'●' * (p.get('confianza') or 0)}", "",

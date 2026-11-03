@@ -18,8 +18,9 @@ import json
 import time
 
 from .. import config
-from ..nucleo.formato import cuota, e, fecha_larga, pct, pesos
+from ..nucleo.formato import cuota, e, pct, pesos
 from . import db
+from .logo import LOGO
 from .sync import ahora
 
 COLOR = {"APOSTAR": "#1f9d55", "VIGILAR": "#c99a06", "NO": "#8a8f98"}
@@ -91,9 +92,11 @@ def _boleto(dia, i, n):
         f"<li><b>{e(x.get('t'))}</b> · {e(x.get('partido'))}<br><span class='m'>{e(x.get('lg') or '')}</span>"
         f"<div class='sel'>{e(x.get('sel'))} <span class='m'>@ {cuota(x.get('o'))}</span></div></li>" for x in patas)
     monto = f"{pesos(i['monto'])}" if i["monto"] else "—"
-    return f"""<div class='c'>
+    color = {"sencilla": "var(--c-v2)", "escalera": "var(--c-esc)", "combinada": "var(--c-comb)",
+             "super": "var(--c-sue)", "progresion": "var(--accent)"}.get(i["tipo"], "var(--accent)")
+    return f"""<div class='c' style='--tipo:{color}'>
 <div class='row'><span class='t' style='background:{COLOR[i["accion"]]}'>{TXT[i["accion"]]}</span>
-<span class='m'>{ICONO.get(i['tipo'], '')} {e(NOMBRE.get(i['tipo'], ''))} · #{n}</span><span class='m'>{marca}</span></div>
+<span class='m' style='color:{color};font-weight:700'>{ICONO.get(i['tipo'], '')} {e(NOMBRE.get(i['tipo'], '')).upper()} · #{n}</span><span class='m'>{marca}</span></div>
 <h3>{e(i['titulo'])}</h3>
 <ol class='pat'>{filas}</ol>
 <div class='g3'>{_kpi(monto, 'monto')}{_kpi(cuota(i['cuota_min']), 'mínima BetPlay')}{_kpi(pct(i['ev'], True, 1), 'EV')}</div>
@@ -141,37 +144,79 @@ def generar(dia: dict) -> None:
                 f"{_kpi(pesos(pr.get('meta')), 'meta')}</div>"
                 + (f"<p>🛡 Modo seguro: apuesta <b>{pesos(ec.get('stake'))}</b> y aparta {pesos(ec.get('asegurado'))}.</p>"
                    if ec.get("asegurado") else "")) if pr else "<p class='m'>Sin escalera activa.</p>"
+    picks_ok = [p for p in dia.get("picks", []) if p.get("id")]
+    con_valor = sum(1 for i in plan if i["accion"] == "APOSTAR")
+    import datetime as _dt
+    dias = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+    meses = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre",
+             "noviembre", "diciembre"]
+    if dia.get("fecha"):
+        d = _dt.date.fromisoformat(dia["fecha"])
+        ceja = f"Picks del {dias[d.weekday()]}, {d.day} de {meses[d.month - 1]}"
+    else:
+        ceja = "Esperando el análisis de la mañana"
+    mensaje = v.get("texto") or "Ahora no hay apuestas con valor. No apostar también cuida tu bank. El próximo análisis llega hacia las 07:00."
     html = f"""<!doctype html><html lang="es"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta http-equiv="refresh" content="300">
-<meta name="theme-color" content="#0f1115"><title>Escalera 50K</title><style>
-:root{{--bg:#f4f5f7;--fg:#14171c;--m:#5d6470;--c:#fff;--ln:#e3e6ea;--ac:#2563eb}}
-@media (prefers-color-scheme:dark){{:root{{--bg:#0f1115;--fg:#e8eaed;--m:#9aa1ab;--c:#181b21;--ln:#2a2f37;--ac:#60a5fa}}}}
-*{{box-sizing:border-box}}body{{margin:0;background:var(--bg);color:var(--fg);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}}
-main{{max-width:640px;margin:0 auto;padding:12px 14px 40px}}header{{position:sticky;top:0;background:var(--bg);padding:10px 0 8px;z-index:2}}
-h1{{font-size:20px;margin:0}}h2{{font-size:15px;text-transform:uppercase;letter-spacing:.04em;color:var(--m);margin:22px 2px 8px}}
-h3{{margin:6px 0 8px;font-size:17px}}.m{{color:var(--m);font-size:13px}}
-.c{{background:var(--c);border:1px solid var(--ln);border-radius:14px;padding:14px;margin:0 0 10px}}
-.g3{{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:8px 0}}.k{{display:flex;flex-direction:column}}
-.k b{{font-size:17px}}.k span{{color:var(--m);font-size:12px}}.t{{color:#fff;border-radius:8px;padding:3px 8px;font-size:12px;font-weight:700}}
+<title>DCBET · DC Tecnology</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800;900&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+:root{{--bg:#0A0A0B;--surface:#141416;--surface-2:#1C1C20;--ink:#F2F2F3;--muted:#A0A0A8;--line:#2A2A30;
+--c-esc:#FF3B3B;--c-v2:#22C98A;--c-sue:#4D9BFF;--c-comb:#A970FF;--accent:#FF1A1A;--accent-soft:rgba(255,26,26,.14);
+--ok:#2FD98B;--ok-soft:rgba(47,217,139,.14);--warn:#FFC23D;--warn-soft:rgba(255,194,61,.14);--risk:#FF6B6B;--info:#9AA4B8;
+--glow:radial-gradient(60% 90% at 100% 0%,rgba(255,26,26,.28),transparent 60%);--shadow:0 20px 44px -26px rgba(0,0,0,.75);
+--f-display:"Montserrat","Segoe UI",system-ui,sans-serif;--f-body:"Inter","Segoe UI",system-ui,sans-serif;
+--f-mono:"JetBrains Mono",ui-monospace,Consolas,monospace;--radius:16px;color-scheme:dark}}
+@media (prefers-color-scheme:light){{:root{{--bg:#F5F4F4;--surface:#FFFFFF;--surface-2:#F0EEEE;--ink:#121214;--muted:#5C5C66;
+--line:#E3E0E0;--c-esc:#D90000;--c-v2:#0A8F5F;--c-sue:#1F6FD6;--c-comb:#7A3FD9;--accent:#E00000;--accent-soft:rgba(224,0,0,.08);
+--ok:#0A8F5F;--ok-soft:rgba(10,143,95,.1);--warn:#B37A00;--warn-soft:rgba(255,190,60,.18);
+--glow:radial-gradient(60% 90% at 100% 0%,rgba(255,0,0,.10),transparent 60%);--shadow:0 18px 40px -28px rgba(0,0,0,.35);color-scheme:light}}}}
+*{{box-sizing:border-box}}body{{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 var(--f-body);-webkit-font-smoothing:antialiased}}
+h1,h2,h3{{font-family:var(--f-display);margin:0;line-height:1.12}}h1{{font-size:clamp(1.7rem,7vw,2.4rem);font-weight:900;letter-spacing:-.02em}}
+h1 span{{color:var(--accent)}}h2{{font-size:1.05rem;font-weight:800;letter-spacing:-.01em}}h3{{font-size:1rem;font-weight:800}}
+.wrap{{max-width:680px;margin:0 auto;padding:0 14px 40px}}.top{{position:sticky;top:0;z-index:5;background:var(--bg);padding:12px 0 6px}}
+.bar{{display:flex;align-items:center;gap:11px}}.logo{{width:42px;height:42px;border-radius:11px;background:#FF0000;overflow:hidden;box-shadow:0 8px 22px -10px var(--accent)}}.logo img{{width:100%;height:100%;object-fit:cover;display:block}}.marca{{font:800 1.15rem var(--f-display)}}
+.estado{{margin-left:auto;display:inline-flex;align-items:center;gap:7px;font:600 .72rem/1 var(--f-body);padding:7px 10px;border-radius:99px;
+border:1px solid var(--line);background:var(--surface);color:var(--ok);white-space:nowrap}}.estado i{{width:8px;height:8px;border-radius:99px;background:var(--ok)}}
+.tabs{{display:flex;gap:4px;overflow-x:auto;padding:10px 0 4px;scrollbar-width:none}}.tabs::-webkit-scrollbar{{display:none}}
+.tabs a{{color:var(--muted);text-decoration:none;font:600 .84rem/1 var(--f-body);padding:9px 13px;border-radius:10px;white-space:nowrap;border:1px solid transparent}}
+.tabs a.on{{background:var(--accent);color:#fff;box-shadow:0 8px 20px -12px var(--accent)}}
+.mod{{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px;margin:14px 0}}
+.hero{{background-image:var(--glow)}}.ceja{{font:800 .7rem/1.2 var(--f-display);letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:6px}}
+.msg{{margin:14px 0;padding:12px 14px;border-radius:12px;background:var(--warn-soft);border:1px solid color-mix(in srgb,var(--warn) 35%,transparent);font-size:1.02rem}}
+.kpis{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}}.kh{{display:grid;gap:2px;padding:10px 12px;border-radius:12px;
+background:var(--surface-2);border:1px solid var(--line)}}.kh b{{font:700 1.35rem/1 var(--f-mono)}}.kh span{{font-size:.72rem;color:var(--muted)}}.kh.si b{{color:var(--ok)}}
+.sec{{font:800 .78rem var(--f-display);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:24px 2px 0}}
+.m{{color:var(--muted);font-size:.82rem}}.t{{color:#fff;border-radius:8px;padding:4px 9px;font:700 .7rem var(--f-body);letter-spacing:.04em}}
 .row{{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap}}
-.rowb{{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--ln)}}
-.pat{{margin:0;padding-left:20px}}.pat li{{margin:0 0 8px}}.sel{{font-weight:600}}
-nav{{display:flex;gap:6px;overflow-x:auto;padding:4px 0}}nav a{{flex:none;color:var(--fg);text-decoration:none;border:1px solid var(--ln);
-border-radius:999px;padding:6px 12px;font-size:13px;background:var(--c)}}svg{{width:100%;height:auto}}
-.l{{fill:none;stroke:var(--ac);stroke-width:2.5}}.b{{stroke:var(--ln);stroke-dasharray:4}}
-</style><main>
-<header><h1>🪜 Escalera 50K</h1><div class="m">{e(fecha_larga(dia['fecha'])) if dia.get('fecha') else 'Sin día publicado'} · {ahora().strftime('%H:%M')}</div>
-<nav><a href="#hoy">Hoy</a><a href="#boletos">Boletos</a><a href="#mias">Mis apuestas</a><a href="#escalera">Escalera</a><a href="#sistemas">Sistemas</a><a href="#metricas">Métricas</a></nav></header>
-<h2 id="hoy">Hoy</h2><div class="c"><h3>{e(v.get('titulo', ''))}</h3><p>{e(v.get('texto', ''))}</p>
+.rowb{{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}}.rowb:last-child{{border:0}}
+.pat{{margin:6px 0 0;padding-left:20px}}.pat li{{margin:0 0 10px}}.sel{{font:800 1.05rem/1.2 var(--f-display)}}
+.c{{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--tipo,var(--accent));border-radius:var(--radius);box-shadow:var(--shadow);padding:16px;margin:12px 0}}
+.g3{{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0}}.k{{display:grid;gap:2px;padding:8px 10px;border-radius:10px;background:var(--surface-2)}}
+.k b{{font:700 1.05rem/1 var(--f-mono)}}.k span{{color:var(--muted);font-size:.7rem}}
+svg{{width:100%;height:auto}}.l{{fill:none;stroke:var(--accent);stroke-width:2.5}}.b{{stroke:var(--line);stroke-dasharray:4}}
+.pie{{text-align:center;color:var(--muted);font-size:.75rem;margin-top:24px}}
+</style><div class="wrap">
+<div class="top"><div class="bar"><div class="logo"><img src="{LOGO}" alt="DC Tecnology"></div><div class="marca">DCBET</div>
+<span class="estado"><i></i>Conectado · {ahora().strftime('%I:%M %p').lower().lstrip('0')}</span></div>
+<nav class="tabs"><a class="on" href="#hoy">🏠 Hoy</a><a href="#boletos">🎟 Boletos</a><a href="#mias">🧾 Mis apuestas</a>
+<a href="#escalera">📈 Escalera</a><a href="#sistemas">🧪 Laboratorio</a><a href="#metricas">📊 Rendimiento</a></nav></div>
+<section id="hoy" class="mod hero"><div class="ceja">{e(ceja)}</div><h1>Tus picks de <span>hoy</span></h1>
+<div class="msg">{e(mensaje)}</div>
+<div class="kpis"><div class="kh"><b>{dia.get('partidos', 0)}</b><span>partidos revisados</span></div>
+<div class="kh"><b>{len(dia.get('picks') or [])}</b><span>con cuotas</span></div>
+<div class="kh si"><b>{con_valor}</b><span>con valor</span></div>
+<div class="kh"><b>{pr.get('paso', 0) if pr else 0}</b><span>peldaño actual</span></div></div>
 <div class="g3">{_kpi(pesos(db.get('saldo') or b.get('real')), 'tu banca')}{_kpi(pesos((dia.get('politica') or {}).get('unidad')), 'unidad')}{_kpi(pesos((dia.get('politica') or {}).get('tope')), 'tope del día')}</div>
-<p class="m">Riesgo: {e((rg.get('estado') or 'normal').upper())} · hoy {pesos(rg.get('netoHoy'), True)} · 7 días {pesos(rg.get('neto7d'), True)}</p></div>
-<h2 id="boletos">Boletos para BetPlay</h2><p class="m">Búscalos en BetPlay tal cual: partido → mercado → selección. Pon el monto y apuesta solo si la cuota es ≥ la mínima.</p>{boletos}
-<h2 id="mias">Tus apuestas</h2><div class="c">{mias}</div>
-<h2 id="escalera">Escalera de crecimiento</h2><div class="c">{escalera}</div>
-<h2 id="sistemas">Prueba de sistemas (simulado)</h2><div class="c">{_sistemas(est.get('sistema'))}</div>
-<h2 id="metricas">Métricas</h2><div class="c"><h3>Tus apuestas reales</h3>{_metricas(est.get('real'))}</div>
-<div class="c"><h3>Sistema (simulado)</h3>{_metricas(est.get('sistema'))}</div>
-<p class="m">Probabilidad no es certeza. Juega solo lo que puedas perder · +18.</p></main></html>"""
+<p class="m">Riesgo {e((rg.get('estado') or 'normal').upper())} · hoy {pesos(rg.get('netoHoy'), True)} · 7 días {pesos(rg.get('neto7d'), True)} · {len(picks_ok)} picks en el plan</p></section>
+<div class="sec" id="boletos">🎟 Boletos para BetPlay</div><p class="m">Búscalos tal cual: partido → mercado → selección. Apuesta solo si la cuota es ≥ la mínima.</p>{boletos}
+<div class="sec" id="mias">🧾 Tus apuestas</div><div class="mod">{mias}</div>
+<div class="sec" id="escalera">📈 Escalera de crecimiento</div><div class="mod">{escalera}</div>
+<div class="sec" id="sistemas">🧪 Laboratorio · prueba de sistemas</div><div class="mod">{_sistemas(est.get('sistema'))}</div>
+<div class="sec" id="metricas">📊 Rendimiento</div><div class="mod"><h3>Tus apuestas reales</h3>{_metricas(est.get('real'))}</div>
+<div class="mod"><h3>Sistema (simulado)</h3>{_metricas(est.get('sistema'))}</div>
+<p class="pie">DCBET · DC Tecnology · <a href="{e(config.SITIO)}" style="color:inherit">sitio</a> · Probabilidad no es certeza · +18</p></div></html>"""
     (config.PANEL / "index.html").write_text(html, encoding="utf-8")
     salud(ok=True)
 

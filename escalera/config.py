@@ -54,7 +54,8 @@ GEMINI_RESPALDOS = [m for m in os.environ.get(
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 OPENROUTER_MODELO = os.environ.get("OPENROUTER_MODEL", "google/gemma-4-31b-it:free")
 OPENROUTER_VISION = os.environ.get("OPENROUTER_VISION", "0") == "1"
-SITIO = os.environ.get("SITIO", "https://claude.ai/artifact/9iFSG3bVbk7GZZCJKfxMoa")
+SITIO = os.environ.get("SITIO", "https://script.google.com/macros/s/AKfycbzAte1NoObySREqwPgx8RcYeXTcz161l0gXV63wRJ5ouMaQJMVRb9ID8NDgYUsHMdCT/exec")
+BOT_NOMBRE = os.environ.get("BOT_NOMBRE", "DCBET")
 DOMINIO = os.environ.get("DOMINIO", "")
 TZ = os.environ.get("TZ_BOT", "America/Bogota")
 
