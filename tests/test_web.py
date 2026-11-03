@@ -44,3 +44,21 @@ def test_restaurar_desde_telegram(monkeypatch):
     assert db.get("saldo") == 98000 and db.get("registro_mid") == 77
     assert db.confirmacion(sync.hoy(), "x-1")["estado"] == "si"
     assert db.aviso_enviado("rec-a") and db.apostado(sync.hoy()) >= 2000
+
+
+def test_enlace_app_firmado(monkeypatch):
+    from escalera.bot import panel
+    t = panel.token_app(111)
+    assert panel.token_valido(t) and not panel.token_valido(t[:-2] + "xx") and not panel.token_valido(None)
+    srv = web.arrancar(0)
+    base = f"http://127.0.0.1:{srv.server_address[1]}"
+    assert _get(base + f"/app?t={t}")[0] == 200
+    assert _get(base + "/app?t=malo")[0] == 403
+    srv.shutdown()
+
+
+def test_fase2_criterios():
+    from escalera.bot import canal
+    c = canal.criterios({"estadisticas": {"sistema": {"n": 40, "icRoi90": [-0.1, 0.2], "pValor": 0.4}}}, "2026-11-03")
+    assert not c["listo"] and len(c["checks"]) == 4
+    assert "Aún no" in canal.mensaje_fase2({}, "2026-11-03")

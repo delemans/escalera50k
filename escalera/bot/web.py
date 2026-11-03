@@ -63,6 +63,15 @@ class Manejador(BaseHTTPRequestHandler):
             f = config.PANEL / "salud.json"
             cuerpo = f.read_bytes() if f.exists() else b'{"ok": true, "nota": "arrancando"}'
             return self._responder(200, cuerpo, "application/json")
+        if ruta == "/app":
+            from urllib.parse import parse_qs, urlparse
+            from .panel import token_valido
+            t = (parse_qs(urlparse(self.path).query).get("t") or [None])[0]
+            if not token_valido(t):
+                return self._responder(403, "Enlace vencido: pide uno nuevo con /app en el bot.".encode())
+            f = config.PANEL / "index.html"
+            cuerpo = f.read_bytes() if f.exists() else "La app se está preparando; vuelve en un minuto.".encode()
+            return self._responder(200, cuerpo, "text/html; charset=utf-8", {"Cache-Control": "no-store"})
         if ruta in ("/", "/index.html"):
             if not _autorizado(self.headers.get("Authorization")):
                 return self._responder(401, "Clave requerida".encode(), extra={

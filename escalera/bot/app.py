@@ -24,7 +24,7 @@ import uuid
 from .. import config
 from ..nucleo import formato as F
 from ..nucleo import staking as STK
-from . import alertas, db, en_vivo, ia, panel, sync, voz, web
+from . import alertas, canal, db, en_vivo, ia, panel, sync, voz, web
 from . import mensajes as M
 from . import telegram as tg
 
@@ -72,13 +72,27 @@ def guardar_registro(items: list[dict], fuente: str):
 # ---------------------------------------------------------------------------
 # Envío del día
 # ---------------------------------------------------------------------------
+def boton_app():
+    url = panel.url_app(sync.ids()["chat"]) if sync.ids()["chat"] else None
+    return [[{"text": "📱 Abrir la app", "web_app": {"url": url}}]] if url else None
+
+
+def poner_menu_app():
+    """Botón de menú del chat que abre la app (se renueva cada día: el enlace vence en 30)."""
+    chat = sync.ids()["chat"]
+    url = panel.url_app(chat) if chat else None
+    if url:
+        tg.llamar("setChatMenuButton", chat_id=chat, menu_button={"type": "web_app", "text": "📱 App",
+                                                                  "web_app": {"url": url}}, reintentos=1)
+
+
 def enviar_dia(dia, solo_tarjetas=False):
     if not dia:
         al_usuario("Todavía no tengo las jugadas de hoy. La mesa las publica hacia las 07:00.")
         return
     if not solo_tarjetas:
-        al_usuario(M.resumen(dia, db.get("saldo")))
-        for extra in (M.plan(dia), M.mis_apuestas(dia)):
+        al_usuario(M.resumen(dia, db.get("saldo")), boton_app())
+        for extra in (M.plan(dia), M.boletos(dia), M.mis_apuestas(dia)):
             if extra:
                 al_usuario(extra)
     for i in dia.get("plan", []):
@@ -106,6 +120,19 @@ def cmd(texto: str, chat_id) -> bool:
         enviar_dia(dia)
     elif c == "/plan":
         tg.enviar(chat_id, M.plan(dia) or "Hoy no hay plan.")
+    elif c == "/app":
+        b = boton_app()
+        tg.enviar(chat_id, "📱 <b>Tu app</b>: plan, boletos, tus apuestas, escalera y métricas en el celular."
+                  if b else "Aún no tengo la dirección pública del servidor.", b)
+        poner_menu_app()
+    elif c == "/boletos":
+        tg.enviar(chat_id, M.boletos(dia) or "Hoy no hay boletos para montar.")
+    elif c == "/informe":
+        tg.enviar(chat_id, M.informe(dia))
+    elif c == "/fase2":
+        tg.enviar(chat_id, canal.mensaje_fase2(dia, db.get("fecha_inicio") or "2026-11-03") + "\n\n" + M.e(canal.resumen_libro()))
+    elif c == "/vip":
+        tg.enviar(chat_id, canal.enlace_vip())
     elif c in ("/escalera", "/peldano", "/peldaño"):
         tg.enviar(chat_id, M.escalera_estado(dia))
     elif c in ("/mis", "/apuestas"):
@@ -419,8 +446,12 @@ def periodicas():
                 m = M.actualizacion(nuevo)
                 if m:
                     al_usuario(m)
+                canal.publicar_resultados(nuevo)
             else:
                 enviar_dia(nuevo)
+                canal.publicar_resultados(nuevo)
+                for h in canal.publicar_dia(nuevo):
+                    log.info("Fase 2: %s", h)
             panel.generar(nuevo)
     if t - _ultimo["alertas"] > 60:
         _ultimo["alertas"] = t
@@ -449,12 +480,20 @@ def periodicas():
         except Exception:
             log.exception("Panel")
     hoy = sync.hoy()
+    if _ultimo.get("menu") != hoy:
+        _ultimo["menu"] = hoy
+        poner_menu_app()
+    n = sync.ahora()
+    if n.weekday() == 6 and n.hour >= 21 and not db.aviso_enviado(f"informe-{hoy}"):
+        if al_usuario("🗓 <b>Informe semanal</b>\n" + M.informe(sync.dia())):
+            db.marcar_aviso(f"informe-{hoy}")
     if _ultimo["respaldo"] != hoy and sync.ahora().hour >= 3:
         _ultimo["respaldo"] = hoy
         log.info("Respaldo: %s", db.respaldar())
 
 
-COMANDOS = [("hoy", "Resumen y jugadas del día"), ("plan", "Qué hacer con cada jugada"), ("mis", "Tus apuestas abiertas"), ("escalera", "Tu escalera y el próximo peldaño"), ("cobro", "¿Cobrar ya? /cobro 45000"),
+COMANDOS = [("hoy", "Resumen y jugadas del día"), ("plan", "Qué hacer con cada jugada"), ("app", "Abrir la app en el celular"), ("boletos", "Qué montar en BetPlay"),
+            ("informe", "Métricas e informe"), ("mis", "Tus apuestas abiertas"), ("escalera", "Tu escalera y el próximo peldaño"), ("cobro", "¿Cobrar ya? /cobro 45000"),
             ("tarjetas", "Tarjetas con botones"), ("banca", "Banca, unidad y tope"),
             ("saldo", "Reportar tu saldo de BetPlay"), ("stats", "Estadísticas"),
             ("riesgo", "Simulación del plan"), ("registro", "Lo registrado hoy"),

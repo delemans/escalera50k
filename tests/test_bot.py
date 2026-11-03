@@ -42,7 +42,7 @@ def test_dia_completo_y_tarjetas(entorno):
     app.enviar_dia(dia)
     t = textos(env)
     assert "ESCALERA 50K" in t[0] and "PLAN DEL DÍA" in t[1]
-    assert len(t) == 2 + len(dia["plan"])
+    assert len(t) == 3 + len(dia["plan"])          # resumen, plan, boletos + tarjetas
     assert any("APOSTAR" in x for x in t)
     for x in t:
         assert len(x) < 4000

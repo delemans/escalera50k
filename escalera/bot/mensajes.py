@@ -436,6 +436,62 @@ def metodo() -> str:
         "<i>Probabilidad no es certeza: un 70 % falla 3 de cada 10 veces.</i>"])
 
 
+MERCADO_BETPLAY = {"1X2": "Resultado final", "DNB": "Apuesta sin empate", "DC": "Doble oportunidad",
+                   "GOLES": "Total de goles", "BTTS": "Ambos equipos marcarán", "TARJETAS": "Total de tarjetas",
+                   "CORNERS": "Total de tiros de esquina"}
+
+
+def boletos(dia: dict) -> str | None:
+    """Lista lista-para-copiar de lo que hay que montar en BetPlay, con monto y mínima."""
+    items = [i for i in dia.get("plan") or [] if i["accion"] in ("APOSTAR", "VIGILAR")]
+    if not items:
+        return None
+    picks = {p["id"]: p for p in dia.get("picks", []) if p.get("id")}
+    jug = dia.get("jugadas") or {}
+    out = [_titulo("🎟", "BOLETOS PARA BETPLAY", f"{len(items)}"), LINEA,
+           "En BetPlay: <b>Fútbol → liga → partido → mercado → selección</b>. Pon el monto y apuesta solo si la cuota es ≥ la mínima.", ""]
+    for n, i in enumerate(items, 1):
+        if i["tipo"] == "sencilla":
+            p = picks.get(i["id"], {})
+            patas = [{"partido": f"{p.get('h')} vs {p.get('a')}", "sel": p.get("sel"), "t": p.get("t"),
+                      "lg": p.get("lg"), "mercado": p.get("mercado"), "o": p.get("o")}]
+        else:
+            patas = (jug.get(i["tipo"]) or {}).get("patas", [])
+        monto = pesos(i["monto"]) if i["monto"] else "solo si paga la mínima"
+        out.append(f"<b>#{n} {ICONO_ACCION[i['accion']]} {e(NOMBRE_TIPO.get(i['tipo'], ''))}</b> · <b>{monto}</b> · mínima <b>{cuota(i['cuota_min'])}</b>")
+        for x in patas:
+            out.append(f"   {e(x.get('t'))} · {e(x.get('partido'))}\n   🔎 {e(MERCADO_BETPLAY.get(x.get('mercado') or '1X2', 'Resultado final'))} → <b>{e(x.get('sel'))}</b>")
+        if i["tipo"] == "escalera":
+            out.append("   ⚠️ <i>Son 3 sencillas en orden (no una combinada): la siguiente solo si ganó la anterior.</i>")
+        elif len(patas) > 1:
+            out.append(f"   🧩 <i>Todas en el mismo boleto (combinada) · cuota total ≈ {cuota(i['cuota_ref'])}</i>")
+        out.append("")
+    out.append("Cuando apuestes, toca ✅ La hice en su tarjeta o mándame el pantallazo.")
+    return "\n".join(out)
+
+
+def informe(dia: dict) -> str:
+    est = dia.get("estadisticas") or {}
+    out = [_titulo("📑", "INFORME", fecha_corta(dia["fecha"]) if dia.get("fecha") else ""), LINEA]
+    for clave, nombre in (("real", "Tus apuestas reales"), ("sistema", "Sistema (simulado)")):
+        d = est.get(clave) or {}
+        if not d.get("n"):
+            out += [f"<b>{nombre}</b>: aún sin jugadas liquidadas.", ""]
+            continue
+        ic = d.get("icRoi90")
+        out += [f"<b>{nombre}</b> · {d['n']} jugadas",
+                f"Aciertos {d['aciertos']} ({pct(d['tasa'])}, esperado {pct(d['tasaEsperada'])}) · beneficio <b>{pesos(d['beneficio'], True)}</b>",
+                f"ROI <b>{pct(d['roi'], True, 1)}</b>" + (f" (IC 90 %: {pct(ic[0], True, 1)} a {pct(ic[1], True, 1)})" if ic else ""),
+                f"Máx. caída {pct(d['maxDrawdown'], dec=1)} · p-valor {str(d['pValor']).replace('.', ',')}"]
+        for t, x in (d.get("porTipo") or {}).items():
+            out.append(f"   {ICONO_TIPO.get(t, '•')} {e(NOMBRE_TIPO.get(t, t))}: {x['aciertos']}/{x['n']} · ROI {pct(x['roi'], True, 1)}")
+        out.append("")
+    rg = dia.get("riesgo") or {}
+    if rg:
+        out.append(f"🛡 Riesgo: {e((rg.get('estado') or '').upper())} · 7 días {pesos(rg.get('neto7d'), True)}")
+    return "\n".join(out)
+
+
 def escalera_estado(dia: dict) -> str:
     """Respuesta a «¿cuál es el peldaño 2?» / /escalera."""
     cfg = dia.get("progresionCfg") or {}
