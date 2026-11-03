@@ -69,6 +69,14 @@ class Manejador(BaseHTTPRequestHandler):
             t = (parse_qs(urlparse(self.path).query).get("t") or [None])[0]
             if not token_valido(t):
                 return self._responder(403, "Enlace vencido: pide uno nuevo con /app en el bot.".encode())
+            try:                                   # sin día cargado → lo busca en el chat del dueño ya mismo
+                from . import panel as _p, sync as _s
+                if _s.dia().get("fecha") != _s.hoy():
+                    nuevo = _s.revisar_dia_nuevo()
+                    if nuevo:
+                        _p.generar(nuevo)
+            except Exception as ex:
+                log.warning("app: %s", ex)
             f = config.PANEL / "index.html"
             cuerpo = f.read_bytes() if f.exists() else "La app se está preparando; vuelve en un minuto.".encode()
             return self._responder(200, cuerpo, "text/html; charset=utf-8", {"Cache-Control": "no-store"})

@@ -83,6 +83,9 @@ def atender_observador(m, chat_id, texto):
     obs = observadores()
     nombre = (m.get("from") or {}).get("first_name") or "Alguien"
     if texto.startswith("/start") and texto.split()[-1] == codigo_invitacion():
+        if str(chat_id) == str(sync.ids()["chat"]):
+            tg.enviar(chat_id, "Tú eres el dueño del bot: no necesitas modo lectura.")
+            return True
         if str(chat_id) not in obs:
             obs[str(chat_id)] = {"nombre": nombre, "desde": sync.ahora().strftime("%d/%m %H:%M")}
             db.put("observadores", obs)
@@ -462,8 +465,10 @@ def procesar(u: dict):
     if not m or m["chat"]["type"] != "private":
         return
     chat_id = m["chat"]["id"]
-    if not sync.ids()["chat"]:
-        db.put("chat", chat_id)
+    texto0 = (m.get("text") or "").strip()
+    es_invitado = texto0.startswith("/start") and texto0.split()[-1] == codigo_invitacion()
+    if not sync.ids()["chat"] and not es_invitado and str(chat_id) not in observadores():
+        db.put("chat", chat_id)               # el primero que escribe (sin enlace de lectura) es el dueño
         _ultimo["dia"] = 0                    # buscar el día fijado ya mismo
     elif str(sync.ids()["chat"]) != str(chat_id):
         if not atender_observador(m, chat_id, (m.get("text") or "").strip()):

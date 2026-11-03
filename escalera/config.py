@@ -37,7 +37,7 @@ def _float(k, d):
 
 
 TOKEN_BOT = os.environ.get("TOKEN_BOT", "")
-CHAT_ID = os.environ.get("CHAT_ID", "")
+CHAT_ID = os.environ.get("CHAT_ID", "8695188020")    # dueño del bot (manda sobre lo guardado)
 CANAL_DATOS = os.environ.get("CANAL_DATOS", "")
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 MODELO = os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-5")

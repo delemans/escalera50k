@@ -141,3 +141,18 @@ def test_observador_modo_lectura(entorno):
     assert textos(env)[-1] == "Este bot es privado."
     app.procesar({"message": {"message_id": 53, "chat": {"id": 111, "type": "private"}, "text": "/quitar 777"}})
     assert "777" not in app.observadores()
+
+
+def test_observador_no_se_vuelve_dueno_tras_reinicio(entorno, monkeypatch):
+    env, _ = entorno
+    db.put("chat", None)
+    db.put("observadores", {"777": {"nombre": "Ana"}})
+    app.procesar({"message": {"message_id": 70, "chat": {"id": 777, "type": "private"}, "text": "hola"}})
+    assert not db.get("chat")                                     # el observador no toma el bot
+    assert "modo lectura" in textos(env)[-1]
+    app.procesar({"message": {"message_id": 71, "chat": {"id": 888, "type": "private"},
+                              "text": "/start " + app.codigo_invitacion()}})
+    assert not db.get("chat")                                     # el enlace de lectura tampoco
+    monkeypatch.setattr(app.config, "CHAT_ID", "111")
+    db.put("chat", 777)
+    assert sync.ids()["chat"] == 111                              # CHAT_ID manda sobre lo guardado

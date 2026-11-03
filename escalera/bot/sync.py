@@ -32,7 +32,7 @@ def hoy() -> str:
 
 
 def ids() -> dict:
-    return {"chat": db.get("chat") or (int(config.CHAT_ID) if config.CHAT_ID else None),
+    return {"chat": (int(config.CHAT_ID) if config.CHAT_ID else None) or db.get("chat"),
             "canal": db.get("canal") or (int(config.CANAL_DATOS) if config.CANAL_DATOS else None)}
 
 
@@ -75,7 +75,8 @@ def publicar_registro():
               "saldoReportado": db.get("saldo"), "apuestas": db.registro(desde, solo_pendientes=True),
               "estado": {"fecha": hoy(), "confirmaciones": db.confirmaciones(hoy()), "diaMid": db.get("dia_mid_enviado"),
                          "avisos": db.avisos_desde(time.time() - 36 * 3600),
-                         "silencioOff": bool(db.get("silencio_off"))}}
+                         "silencioOff": bool(db.get("silencio_off")),
+                         "observadores": db.get("observadores") or {}}}
     msg = tg.enviar_json_fijado(canal, "registro.json", cuerpo, caption=f"💓 {cuerpo['latido']}",
                                 borrar_anterior=db.get("registro_mid"))
     if msg:
@@ -106,6 +107,9 @@ def restaurar() -> bool:
                 db.set_confirmacion(est.get("fecha"), ref, estado=estado)
             for clave in est.get("avisos") or []:
                 db.marcar_aviso(clave)
+            obs = {k: v for k, v in (est.get("observadores") or {}).items() if str(k) != str(i["chat"])}
+            if obs:
+                db.put("observadores", obs)
             if est.get("diaMid"):
                 db.put("dia_mid_enviado", est["diaMid"])
     revisar_dia_nuevo()            # deja el día en disco sin mandarlo
