@@ -77,6 +77,7 @@ EFIMERO = bool(os.environ.get("RENDER")) or os.environ.get("DISCO_EFIMERO") == "
 PANEL_USUARIO = os.environ.get("PANEL_USUARIO", "admin")
 PANEL_CLAVE = os.environ.get("PANEL_CLAVE", "")
 CODIGO_OBSERVADOR = os.environ.get("CODIGO_OBSERVADOR", "")
+OBSERVADORES = [x.strip() for x in os.environ.get("OBSERVADORES", "").split(",") if x.strip()]   # ids fijos en modo lectura
 
 DATOS = Path(os.environ.get("DATOS_DIR", RAIZ / "datos"))
 PANEL = Path(os.environ.get("PANEL_DIR", DATOS / "panel"))

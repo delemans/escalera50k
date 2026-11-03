@@ -78,7 +78,7 @@ def test_atajo_y_confirmar(entorno):
 def test_privado_y_comandos(entorno):
     env, dia = entorno
     app.procesar({"message": {"message_id": 1, "chat": {"id": 999, "type": "private"}, "text": "hola"}})
-    assert textos(env)[-1] == "Este bot es privado."
+    assert textos(env)[-1].startswith("Este bot es privado.")
     for c in ("/banca", "/stats", "/riesgo", "/metodo", "/plan", "/registro", "/saldo 95.000"):
         app.procesar({"message": {"message_id": 2, "chat": {"id": 111, "type": "private"}, "text": c}})
     assert db.get("saldo") == 95000
@@ -138,7 +138,7 @@ def test_observador_modo_lectura(entorno):
     assert ("forwardMessage", "777") in metodos                    # ve lo que escribe el dueño
     assert ("sendMessage", "777") in metodos                       # y lo que el bot le responde
     app.procesar({"message": {"message_id": 52, "chat": {"id": 888, "type": "private"}, "text": "/start malo"}})
-    assert textos(env)[-1] == "Este bot es privado."
+    assert textos(env)[-1].startswith("Este bot es privado.")
     app.procesar({"message": {"message_id": 53, "chat": {"id": 111, "type": "private"}, "text": "/quitar 777"}})
     assert "777" not in app.observadores()
 
@@ -156,3 +156,23 @@ def test_observador_no_se_vuelve_dueno_tras_reinicio(entorno, monkeypatch):
     monkeypatch.setattr(app.config, "CHAT_ID", "111")
     db.put("chat", 777)
     assert sync.ids()["chat"] == 111                              # CHAT_ID manda sobre lo guardado
+
+
+def test_espejo_completo_con_observador_fijo(entorno, monkeypatch):
+    env, dia = entorno
+    db.put("observadores", {})
+    monkeypatch.setattr(app.config, "OBSERVADORES", ["555"])
+    assert "555" in app.observadores()
+    antes = len(env)
+    app.al_usuario("Plan de hoy")
+    tg.editar(111, 5, "Confirmado")
+    cb = {"id": "c", "from": {"id": 111}, "data": "no:x",
+          "message": {"chat": {"id": 111}, "message_id": 5, "text": "x",
+                      "reply_markup": {"inline_keyboard": [[{"text": "❌ No la hice", "callback_data": "no:x"}]]}}}
+    app.procesar({"callback_query": cb})
+    a555 = [p.get("text", "") for m, p in env[antes:] if m == "sendMessage" and str(p.get("chat_id")) == "555"]
+    assert any("Plan de hoy" in t for t in a555)
+    assert any("✏️ Confirmado" in t for t in a555)
+    assert any("No la hice" in t for t in a555)
+    app.procesar({"message": {"message_id": 80, "chat": {"id": 555, "type": "private"}, "text": "hice 1"}})
+    assert "modo lectura" in textos(env)[-1]

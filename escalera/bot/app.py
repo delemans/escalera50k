@@ -46,7 +46,11 @@ def al_usuario(texto, botones=None, silencioso=False):
 # Observadores · modo lectura (reciben copia de todo, sin botones ni registro)
 # ---------------------------------------------------------------------------
 def observadores() -> dict:
-    return db.get("observadores") or {}
+    obs = dict(db.get("observadores") or {})
+    for cid in config.OBSERVADORES:                    # fijos en Render: sobreviven a cualquier reinicio
+        obs.setdefault(str(cid), {"nombre": "Observador", "desde": "Render"})
+    obs.pop(str(sync.ids()["chat"]), None)
+    return obs
 
 
 def codigo_invitacion() -> str:
@@ -89,7 +93,9 @@ def atender_observador(m, chat_id, texto):
         if str(chat_id) not in obs:
             obs[str(chat_id)] = {"nombre": nombre, "desde": sync.ahora().strftime("%d/%m %H:%M")}
             db.put("observadores", obs)
-            al_usuario(f"👁 <b>{M.e(nombre)}</b> entró en modo lectura. Para sacarlo: <code>/quitar {chat_id}</code>")
+            al_usuario(f"👁 <b>{M.e(nombre)}</b> entró en modo lectura. Para sacarlo: <code>/quitar {chat_id}</code>\n"
+                       f"📌 Para que no se pierda si el servidor reinicia, agrega en Render:\n"
+                       f"<code>OBSERVADORES={','.join(sorted(set(list(obs) + [str(chat_id)])))}</code>")
         tg.enviar(chat_id, AYUDA_OBSERVADOR)
         return True
     if str(chat_id) in obs:
@@ -191,7 +197,8 @@ def cmd(texto: str, chat_id) -> bool:
     elif c == "/observadores":
         obs = observadores()
         tg.enviar(chat_id, "👁 Observadores:\n" + ("\n".join(f"• {M.e(v['nombre'])} · <code>{k}</code> · desde {v['desde']}"
-                                                            for k, v in obs.items()) or "ninguno"))
+                                                            for k, v in obs.items()) or "ninguno")
+                  + (f"\n\n📌 En Render: <code>OBSERVADORES={','.join(obs)}</code>" if obs else ""))
     elif c == "/quitar":
         obs = observadores()
         cid = partes[1] if len(partes) > 1 else ""
@@ -272,11 +279,22 @@ def cmd(texto: str, chat_id) -> bool:
 # ---------------------------------------------------------------------------
 # Botones
 # ---------------------------------------------------------------------------
+def _espejo_toque(cb):
+    datos = cb.get("data", "")
+    teclas = ((cb.get("message") or {}).get("reply_markup") or {}).get("inline_keyboard") or []
+    etiqueta = next((b.get("text") for fila in teclas for b in fila if b.get("callback_data") == datos), datos)
+    for cid in list(observadores()):
+        tg.llamar("sendMessage", chat_id=cid, text=f"👆 El dueño tocó «{M.e(etiqueta)}»",
+                  parse_mode="HTML", disable_notification=True, reintentos=1)
+
+
 def boton(cb):
     datos = cb.get("data", "")
     accion, _, clave = datos.partition(":")
     msg = cb.get("message") or {}
     chat_id = msg.get("chat", {}).get("id")
+    if observadores():
+        _espejo_toque(cb)
     hoy = sync.hoy()
 
     if accion in ("ok", "descartar"):
@@ -472,7 +490,8 @@ def procesar(u: dict):
         _ultimo["dia"] = 0                    # buscar el día fijado ya mismo
     elif str(sync.ids()["chat"]) != str(chat_id):
         if not atender_observador(m, chat_id, (m.get("text") or "").strip()):
-            tg.enviar(chat_id, "Este bot es privado.")
+            tg.enviar(chat_id, "Este bot es privado. Si eres observador, vuelve a abrir tu enlace de lectura "
+                               "(el que te pasó el dueño) y quedas conectado de nuevo.")
         return
     if observadores():
         reenviar_a_observadores(m)

@@ -89,6 +89,11 @@ def enviar(chat_id, texto: str, botones=None, silencioso=False):
 
 
 def editar(chat_id, message_id, texto, botones=None):
+    if espejo:
+        try:
+            espejo(chat_id, "✏️ " + texto)
+        except Exception as ex:
+            log.warning("espejo: %s", ex)
     return llamar("editMessageText", chat_id=chat_id, message_id=message_id, text=texto[:4000],
                   parse_mode="HTML", disable_web_page_preview=True,
                   reply_markup={"inline_keyboard": botones or []})
