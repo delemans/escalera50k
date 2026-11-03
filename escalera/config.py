@@ -75,6 +75,7 @@ MODO = os.environ.get("MODO", "webhook" if URL_PUBLICA else "polling")
 EFIMERO = bool(os.environ.get("RENDER")) or os.environ.get("DISCO_EFIMERO") == "1"
 PANEL_USUARIO = os.environ.get("PANEL_USUARIO", "admin")
 PANEL_CLAVE = os.environ.get("PANEL_CLAVE", "")
+CODIGO_OBSERVADOR = os.environ.get("CODIGO_OBSERVADOR", "")
 
 DATOS = Path(os.environ.get("DATOS_DIR", RAIZ / "datos"))
 PANEL = Path(os.environ.get("PANEL_DIR", DATOS / "panel"))

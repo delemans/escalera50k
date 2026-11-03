@@ -39,7 +39,58 @@ _apagar = [False]
 # ---------------------------------------------------------------------------
 def al_usuario(texto, botones=None, silencioso=False):
     chat = sync.ids()["chat"]
-    return tg.enviar(chat, texto, botones, silencioso) if chat else None
+    res = tg.enviar(chat, texto, botones, silencioso) if chat else None
+    replicar(texto)
+    return res
+
+
+# ---------------------------------------------------------------------------
+# Observadores · modo lectura (reciben copia de todo, sin botones ni registro)
+# ---------------------------------------------------------------------------
+def observadores() -> dict:
+    return db.get("observadores") or {}
+
+
+def codigo_invitacion() -> str:
+    import hashlib
+    return config.CODIGO_OBSERVADOR or "ver" + hashlib.sha256(("obs:" + config.TOKEN_BOT).encode()).hexdigest()[:10]
+
+
+def replicar(texto):
+    for cid in list(observadores()):
+        tg.enviar(cid, "👁 " + texto, None, silencioso=True)
+
+
+LECTURA = {"/hoy", "/plan", "/boletos", "/informe", "/escalera", "/mis", "/stats", "/riesgo", "/metodo", "/ayuda", "/fase2"}
+
+
+def atender_observador(m, chat_id, texto):
+    obs = observadores()
+    nombre = (m.get("from") or {}).get("first_name") or "Alguien"
+    if texto.startswith("/start") and texto.split()[-1] == codigo_invitacion():
+        if str(chat_id) not in obs:
+            obs[str(chat_id)] = {"nombre": nombre, "desde": sync.ahora().strftime("%d/%m %H:%M")}
+            db.put("observadores", obs)
+            al_usuario(f"👁 <b>{M.e(nombre)}</b> entró en modo lectura. Para sacarlo: <code>/quitar {chat_id}</code>")
+        tg.enviar(chat_id, "👁 <b>Modo lectura activado</b>\nVas a recibir una copia de todo lo que publica el bot: plan, "
+                           "boletos, avisos en vivo y resultados.\nPuedes usar /hoy /plan /boletos /informe /escalera.\n"
+                           "<i>No puedes registrar apuestas ni tocar botones.</i>")
+        return True
+    if str(chat_id) in obs:
+        c = texto.split()[0].split("@")[0].lower() if texto else ""
+        if c == "/hoy":
+            dia = sync.dia()
+            if not dia:
+                tg.enviar(chat_id, "Todavía no hay jugadas de hoy.")
+            for x in (M.resumen(dia), M.plan(dia), M.boletos(dia), M.mis_apuestas(dia)) if dia else ():
+                if x:
+                    tg.enviar(chat_id, x, silencioso=True)
+        elif c in LECTURA:
+            cmd(texto, chat_id)
+        else:
+            tg.enviar(chat_id, "👁 Estás en modo lectura: solo puedes consultar (/hoy /plan /boletos /informe /escalera).")
+        return True
+    return False
 
 
 def item_plan(ref):
@@ -120,6 +171,23 @@ def cmd(texto: str, chat_id) -> bool:
         enviar_dia(dia)
     elif c == "/plan":
         tg.enviar(chat_id, M.plan(dia) or "Hoy no hay plan.")
+    elif c == "/invitar":
+        u = (tg.llamar("getMe") or {}).get("username", "")
+        tg.enviar(chat_id, "👁 <b>Invitar en modo lectura</b>\nMándale este enlace a la persona. Al abrirlo y tocar "
+                           f"<b>Iniciar</b>, recibe copia de todo (sin poder registrar nada):\nhttps://t.me/{u}?start={codigo_invitacion()}")
+    elif c == "/observadores":
+        obs = observadores()
+        tg.enviar(chat_id, "👁 Observadores:\n" + ("\n".join(f"• {M.e(v['nombre'])} · <code>{k}</code> · desde {v['desde']}"
+                                                            for k, v in obs.items()) or "ninguno"))
+    elif c == "/quitar":
+        obs = observadores()
+        cid = partes[1] if len(partes) > 1 else ""
+        if obs.pop(cid, None):
+            db.put("observadores", obs)
+            tg.enviar(cid, "👁 Tu acceso de lectura terminó.")
+            tg.enviar(chat_id, "Listo, quitado.")
+        else:
+            tg.enviar(chat_id, "No encontré ese observador. Mira /observadores.")
     elif c == "/app":
         b = boton_app()
         tg.enviar(chat_id, "📱 <b>Tu app</b>: plan, boletos, tus apuestas, escalera y métricas en el celular."
@@ -386,7 +454,8 @@ def procesar(u: dict):
     if not sync.ids()["chat"]:
         db.put("chat", chat_id)
     elif str(sync.ids()["chat"]) != str(chat_id):
-        tg.enviar(chat_id, "Este bot es privado.")
+        if not atender_observador(m, chat_id, (m.get("text") or "").strip()):
+            tg.enviar(chat_id, "Este bot es privado.")
         return
     texto = (m.get("text") or m.get("caption") or "").strip()
     if texto.startswith("/") and cmd(texto, chat_id):
@@ -492,7 +561,7 @@ def periodicas():
         log.info("Respaldo: %s", db.respaldar())
 
 
-COMANDOS = [("hoy", "Resumen y jugadas del día"), ("plan", "Qué hacer con cada jugada"), ("app", "Abrir la app en el celular"), ("boletos", "Qué montar en BetPlay"),
+COMANDOS = [("hoy", "Resumen y jugadas del día"), ("plan", "Qué hacer con cada jugada"), ("app", "Abrir la app en el celular"), ("invitar", "Invitar a alguien en modo lectura"), ("boletos", "Qué montar en BetPlay"),
             ("informe", "Métricas e informe"), ("mis", "Tus apuestas abiertas"), ("escalera", "Tu escalera y el próximo peldaño"), ("cobro", "¿Cobrar ya? /cobro 45000"),
             ("tarjetas", "Tarjetas con botones"), ("banca", "Banca, unidad y tope"),
             ("saldo", "Reportar tu saldo de BetPlay"), ("stats", "Estadísticas"),

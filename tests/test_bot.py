@@ -118,3 +118,21 @@ def test_herramientas_ia(entorno):
     assert props and props[0]["accion"] == "propia"
     r = ia.ejecutar_herramienta("simular_riesgo", {"ev": 0.02}, dia, pol, [])
     assert 0 <= r["pCaida30"] <= 1
+
+
+def test_observador_modo_lectura(entorno):
+    env, dia = entorno
+    codigo = app.codigo_invitacion()
+    app.procesar({"message": {"message_id": 50, "from": {"first_name": "Ana"}, "chat": {"id": 777, "type": "private"},
+                              "text": f"/start {codigo}"}})
+    assert "777" in app.observadores()
+    antes = len(env)
+    app.al_usuario("Aviso de prueba")
+    destinos = [p.get("chat_id") for m, p in env[antes:] if m == "sendMessage"]
+    assert 111 in destinos and "777" in destinos
+    app.procesar({"message": {"message_id": 51, "chat": {"id": 777, "type": "private"}, "text": "hice 1"}})
+    assert "modo lectura" in textos(env)[-1]
+    app.procesar({"message": {"message_id": 52, "chat": {"id": 888, "type": "private"}, "text": "/start malo"}})
+    assert textos(env)[-1] == "Este bot es privado."
+    app.procesar({"message": {"message_id": 53, "chat": {"id": 111, "type": "private"}, "text": "/quitar 777"}})
+    assert "777" not in app.observadores()
