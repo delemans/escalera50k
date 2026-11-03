@@ -14,7 +14,7 @@ CHAT_ID = PENDIENTE
 CANAL_DATOS = PENDIENTE
 SITIO = https://claude.ai/artifact/9iFSG3bVbk7GZZCJKfxMoa (no modifiques su HTML)
 Base de datos: ArtifactData (ToolSearch "select:ArtifactData"). Toda escritura a un documento existente lleva if_version de tu última lectura; varias escrituras en un "batch" (máx. 50 por batch).
-Documentos: config/banca {inicial:90000 (simulación), inicialReal, stakes, stakingReal}, config/progresion, config/telegram {ok, ultimaRevision, nota, offset, chatId, diaMsgId, botVivo, latido, eventos (20 últimos)}, colección "apuestas", picks/actual, historial/AAAA-MM-DD.
+Documentos: config/banca {inicial (banca de partida del sistema), inicialReal, fechaInicio, stakes, stakingReal}, config/progresion, config/telegram {ok, ultimaRevision, nota, offset, chatId, diaMsgId, botVivo, latido, eventos (20 últimos)}, colección "apuestas", picks/actual, historial/AAAA-MM-DD.
 
 ══ §2 PREPARAR EL CÓDIGO ══
 TZ=America/Bogota date. Trabaja en una carpeta nueva del scratchpad.
@@ -24,20 +24,22 @@ Si REPO es PENDIENTE: avisa en la notificación que falta el repositorio y termi
 ══ §3 LEER LO QUE REPORTÓ EL USUARIO ══
 Si TOKEN_BOT es PENDIENTE, salta §3 y deja config/telegram ok:false, nota "Falta el token del bot".
 - Con CANAL_DATOS: getChat?chat_id=CANAL_DATOS → pinned_message.document (registro.json) → getFile → descarga. Trae {latido, saldoReportado, apuestas:[{tgId, fecha, accion: hice|no_hice|propia, ref, tipo, partido, sel, cuota, valor, estado, fuente}]}. botVivo = latido de hace menos de 3 h. NUNCA uses getUpdates en este modo.
-- Sin CANAL_DATOS: getUpdates?offset=<config.offset>&timeout=0 del chat CHAT_ID; fotos con getFile + Read; voz con faster-whisper ("small", cpu, int8, "es"); conviértelo a la misma lista. Luego config.offset = último update_id + 1.
+- Sin CANAL_DATOS: primero getWebhookInfo; si tiene url (el bot está en Render con webhook), NO uses getUpdates (chocaría): salta la lectura y agrega alerta amarilla «Conecta el canal de datos». Solo si no hay webhook: getUpdates?offset=<config.offset>&timeout=0 del chat CHAT_ID; fotos con getFile + Read; voz con faster-whisper ("small", cpu, int8, "es"); conviértelo a la misma lista. Luego config.offset = último update_id + 1.
 Aplica a "apuestas" (ignora tgId ya usados): hice+ref → real:true, cuotaReal, stakeReal, fuenteReal "telegram", tgId, marcadaEn; no_hice → real:false y campos reales a null; propia → fila AAAA-MM-DD-xN (simulada:false, real:true, cuotaRef = su cuota, ev null). Sin cuota o valor → no la apliques y agrega alerta amarilla. Guarda los tgId aplicados para "registrados".
 
 ══ §4 LIQUIDAR ══
 Busca marcadores finales confirmados (ESPN, web de la liga u otra fuente fiable) de cada partido de las filas "pendiente". 90 minutos. Aplazado = "aplazado". Con dudas, no lo pongas.
-Escribe liquidar.json = {"apuestas": [filas pendientes, cada una con "id" = su doc_id], "marcadores": {"Local vs Visitante": "2-1", …}, "progresion": config/progresion} y corre:
+Escribe liquidar.json = {"apuestas": [filas pendientes, cada una con "id" = su doc_id], "marcadores": {"Local vs Visitante": "2-1" o, si hay apuestas de tarjetas/córners en ese partido, {"marcador": "2-1", "tarjetas": total de tarjetas amarillas+rojas a 90', "corners": total}}, "progresion": config/progresion} y corre:
   python -m escalera.cli liquidar liquidar.json --out liquidado.json
 Escribe en la base cada fila de liquidado.filas (con liquidadoPor "manana dd/mm HH:MM") y config/progresion = liquidado.progresion si cambió.
 
 ══ §5 RECOLECTAR DATOS DEL DÍA ══
 5.1 StatArea: WebFetch https://www.statarea.com/predictions/date/AAAA-MM-DD/ pidiendo la lista COMPLETA en CSV con encabezado league,time,tip,home,away,p1,pX,p2,h1,hX,h2,o15,o25,o35,bts,ots. Si viene cortada, repite con offset 25000, 45000… Guarda statarea.csv.
 5.2 Hora: confirma con una fuente de cuotas la hora de un partido europeo (21:00 CET = 15:00 Bogotá). AJUSTE = horas a sumar a StatArea para llegar a Bogotá (0 o −1).
-5.3 python -m escalera.cli candidatos statarea.csv --ajuste AJUSTE --out candidatos.json → hasta 15 candidatos (ligas principales, StatArea ≥ 50 %, desde 07:30).
-5.4 Cuotas: para cada candidato, cuotas 1X2 del mismo día en 2 o más casas si se puede (WebSearch "oddslot <local> <visitante> <fecha>", "oddscalendar <local> <visitante>", "gainblers <local> <visitante>"; WebFetch; Oddslot usa UTC; confirma fecha y equipos). NO consultes betplay.com.co ni APIs de Kambi. Guarda "casas": [{"bk": "Casa", "o": [local, empate, visitante]}].
+5.3 python -m escalera.cli candidatos statarea.csv --ajuste AJUSTE --out candidatos.json → hasta 30 candidatos por partido y mercado (busca cuotas de TODOS: la soñadora necesita muchas piernas con valor para llegar a cuota 100): 1X2, DNB (empate no apuesta), GOLES (más/menos 2,5) y BTTS (ambos marcan), cada uno con su "statarea".
+5.4 Cuotas por mercado, del mismo día, en 2 o más casas e idealmente Pinnacle (es la casa de referencia y pesa doble). Fuentes: WebSearch "oddslot <local> <visitante> <fecha>", "oddscalendar <local> <visitante>", "gainblers <local> <visitante>", "oddspedia <local> <visitante>"; WebFetch; Oddslot usa UTC; confirma fecha y equipos. NO consultes betplay.com.co ni APIs de Kambi. Formato de "casas" según "mercado":
+   1X2 → [{"bk","o":[local, empate, visitante]}] · DNB → [{"bk","o":[local, visitante]}] + "casas1x2" con el 1X2 del partido · GOLES → [{"bk","o":[más, menos]}] de esa línea · BTTS → [{"bk","o":[sí, no]}].
+   Extra opcional: si en 2+ casas (con Pinnacle) encuentras líneas de TARJETAS o CORNERS de un partido de liga principal, agrega un candidato {"h","a","lg","t","mercado":"TARJETAS"|"CORNERS","linea","lado":"over"|"under","casas":[{"bk","o":[más, menos]}]}. Sin StatArea, solo entra si la mejor cuota supera el consenso.
 5.5 Noticias (últimas 48 h) para cada candidato con cuotas: "<equipo> lesionados", "<equipo> alineación probable", "<equipo> team news", rotación por copa/Champions. "noticias" ≤ 160 caracteres con la fuente. Si el equipo elegido pierde jugadores clave o rotará claramente: "alerta": true. Las noticias solo vetan.
 
 ══ §6 ANALIZAR (el código decide) ══
@@ -47,10 +49,10 @@ Escribe entrada.json:
  "banca": config/banca, "progresion": config/progresion (ya liquidada),
  "saldoReal": saldoReportado o null,
  "variacion": {"varReal": cambio de la banca real por lo liquidado hoy, "varSistema": ídem sistema},
- "candidatos": [cada candidato de 5.3 + "casas", "noticias", "alerta"],
+ "candidatos": [cada candidato de 5.3 (con su "statarea", "mercado", "lado", "linea") + "casas" (+ "casas1x2" en DNB), "noticias", "alerta"],
  "apuestas": TODAS las filas de "apuestas" (ya actualizadas, cada una con "id" = su doc_id)}
 y corre: python -m escalera.cli analizar entrada.json --out salida.json
-salida.dia trae: veredicto, validación, picks, jugadas, plan (qué hacer con cada jugada: APOSTAR / VIGILAR / NO, con monto real y cuota mínima), política de stakes, simulación Monte Carlo, estadísticas, semáforo y alertas. salida.apuestasNuevas trae las filas nuevas.
+salida.dia trae: veredicto, validación, picks (cada uno con su justificación: a favor, en contra, confianza 1–5), jugadas (individuales, escalera, combinada, soñadora y progresión), misApuestas (lo que el usuario ya apostó), porQue de cada jugada, plan (qué hacer con cada jugada: APOSTAR / VIGILAR / NO, con monto real y cuota mínima), política de stakes, simulación Monte Carlo, estadísticas, semáforo y alertas. salida.apuestasNuevas trae las filas nuevas.
 Agrega a salida.dia: "liquidado": [{id, tipo, titulo: seleccion, resultado, marcador, neto, netoReal}] de §4, "registrados": tgIds de §3, y en "alertas" las de §3–§4. Si el usuario apostó ayer más del tope o su banca real bajó del 70 %, agrega alerta roja al inicio.
 
 ══ §7 ESCRIBIR ══

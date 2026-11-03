@@ -73,7 +73,7 @@ def publicar_registro():
     desde = (ahora() - dt.timedelta(days=7)).date().isoformat()
     cuerpo = {"version": 2, "latido": ahora().isoformat(timespec="minutes"), "chatId": ids()["chat"],
               "saldoReportado": db.get("saldo"), "apuestas": db.registro(desde, solo_pendientes=True),
-              "estado": {"fecha": hoy(), "confirmaciones": db.confirmaciones(hoy()),
+              "estado": {"fecha": hoy(), "confirmaciones": db.confirmaciones(hoy()), "diaMid": db.get("dia_mid_enviado"),
                          "avisos": db.avisos_desde(time.time() - 36 * 3600),
                          "silencioOff": bool(db.get("silencio_off"))}}
     msg = tg.enviar_json_fijado(canal, "registro.json", cuerpo, caption=f"💓 {cuerpo['latido']}",
@@ -106,6 +106,8 @@ def restaurar() -> bool:
                 db.set_confirmacion(est.get("fecha"), ref, estado=estado)
             for clave in est.get("avisos") or []:
                 db.marcar_aviso(clave)
+            if est.get("diaMid"):
+                db.put("dia_mid_enviado", est["diaMid"])
     revisar_dia_nuevo()            # deja el día en disco sin mandarlo
     db.put("restaurado", ahora().isoformat(timespec="minutes"))
     log.info("Estado restaurado desde Telegram")

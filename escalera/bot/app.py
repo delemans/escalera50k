@@ -453,6 +453,7 @@ def procesar(u: dict):
     chat_id = m["chat"]["id"]
     if not sync.ids()["chat"]:
         db.put("chat", chat_id)
+        _ultimo["dia"] = 0                    # buscar el día fijado ya mismo
     elif str(sync.ids()["chat"]) != str(chat_id):
         if not atender_observador(m, chat_id, (m.get("text") or "").strip()):
             tg.enviar(chat_id, "Este bot es privado.")
@@ -511,7 +512,9 @@ def periodicas():
         nuevo = sync.revisar_dia_nuevo()
         if nuevo:
             log.info("Publicación nueva %s (%s)", nuevo.get("fecha"), nuevo.get("publicacion"))
-            if nuevo.get("publicacion") == "revision" and nuevo.get("fecha") == previo:
+            if nuevo.get("_mid") and nuevo.get("_mid") == db.get("dia_mid_enviado"):
+                log.info("Día ya enviado antes del reinicio: no se repite")
+            elif nuevo.get("publicacion") == "revision" and nuevo.get("fecha") == previo:
                 m = M.actualizacion(nuevo)
                 if m:
                     al_usuario(m)
@@ -521,6 +524,8 @@ def periodicas():
                 canal.publicar_resultados(nuevo)
                 for h in canal.publicar_dia(nuevo):
                     log.info("Fase 2: %s", h)
+            db.put("dia_mid_enviado", nuevo.get("_mid"))
+            sync.publicar_registro()
             panel.generar(nuevo)
     if t - _ultimo["alertas"] > 60:
         _ultimo["alertas"] = t
@@ -585,6 +590,10 @@ def main():
     tg.llamar("setMyCommands", commands=[{"command": c, "description": d} for c, d in COMANDOS])
     if config.EFIMERO:
         sync.restaurar()
+    try:
+        panel.generar(sync.dia())            # la app nunca arranca vacía si hay día fijado
+    except Exception:
+        log.exception("Panel inicial")
     panel.salud(True, "arrancando")
     if config.PUERTO:
         web.arrancar(config.PUERTO)
