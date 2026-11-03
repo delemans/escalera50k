@@ -11,6 +11,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import logging
+import time
 from zoneinfo import ZoneInfo
 
 from .. import config
@@ -71,9 +72,41 @@ def publicar_registro():
         return None
     desde = (ahora() - dt.timedelta(days=7)).date().isoformat()
     cuerpo = {"version": 2, "latido": ahora().isoformat(timespec="minutes"), "chatId": ids()["chat"],
-              "saldoReportado": db.get("saldo"), "apuestas": db.registro(desde, solo_pendientes=True)}
+              "saldoReportado": db.get("saldo"), "apuestas": db.registro(desde, solo_pendientes=True),
+              "estado": {"fecha": hoy(), "confirmaciones": db.confirmaciones(hoy()),
+                         "avisos": db.avisos_desde(time.time() - 36 * 3600),
+                         "silencioOff": bool(db.get("silencio_off"))}}
     msg = tg.enviar_json_fijado(canal, "registro.json", cuerpo, caption=f"💓 {cuerpo['latido']}",
                                 borrar_anterior=db.get("registro_mid"))
     if msg:
         db.put("registro_mid", msg["message_id"])
     return msg
+
+
+def restaurar() -> bool:
+    """Con disco efímero (Render gratis): al arrancar, recupera el estado desde
+    los mensajes fijados de Telegram. No reenvía el día."""
+    if not db.vacia():
+        return False
+    i = ids()
+    if i["chat"]:
+        db.put("chat", i["chat"])
+    if i["canal"]:
+        db.put("canal", i["canal"])
+        reg, mid = tg.leer_json_fijado(i["canal"])
+        if reg:
+            db.put("registro_mid", mid)
+            if reg.get("saldoReportado"):
+                db.put("saldo", reg["saldoReportado"])
+            if reg.get("apuestas"):
+                db.registrar(reg["apuestas"])
+            est = reg.get("estado") or {}
+            db.put("silencio_off", bool(est.get("silencioOff")))
+            for ref, estado in (est.get("confirmaciones") or {}).items():
+                db.set_confirmacion(est.get("fecha"), ref, estado=estado)
+            for clave in est.get("avisos") or []:
+                db.marcar_aviso(clave)
+    revisar_dia_nuevo()            # deja el día en disco sin mandarlo
+    db.put("restaurado", ahora().isoformat(timespec="minutes"))
+    log.info("Estado restaurado desde Telegram")
+    return True

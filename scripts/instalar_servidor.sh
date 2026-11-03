@@ -27,7 +27,7 @@ if [ ! -f .env ]; then
   cp .env.example .env
   read -rp "Token del bot de Telegram: " TOKEN; sed -i "s|^TOKEN_BOT=.*|TOKEN_BOT=$TOKEN|" .env
   read -rp "Clave API de Claude (sk-ant-...): " KEY; sed -i "s|^ANTHROPIC_API_KEY=.*|ANTHROPIC_API_KEY=$KEY|" .env
-  read -rp "Dominio del panel (ej. escalera.midominio.com): " DOM; sed -i "s|^DOMINIO=.*|DOMINIO=$DOM|" .env
+  read -rp "Dominio del panel (ej. escalera.dctecnology.xyz): " DOM; sed -i "s|^DOMINIO=.*|DOMINIO=$DOM|" .env
   read -rp "Saldo actual en BetPlay (ej. 100000): " BAN; sed -i "s|^BANCA_INICIAL=.*|BANCA_INICIAL=${BAN:-100000}|" .env
   read -rsp "Clave para entrar al panel web: " PW; echo
   HASH=$(sudo docker run --rm caddy:2.8 caddy hash-password --plaintext "$PW")

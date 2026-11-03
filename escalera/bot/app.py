@@ -15,6 +15,7 @@ En cualquier momento: texto, pantallazo o voz → Claude responde y registra.
 from __future__ import annotations
 
 import logging
+import queue
 import re
 import signal
 import time
@@ -23,7 +24,7 @@ import uuid
 from .. import config
 from ..nucleo import formato as F
 from ..nucleo import staking as STK
-from . import alertas, db, ia, panel, sync, voz
+from . import alertas, db, ia, panel, sync, voz, web
 from . import mensajes as M
 from . import telegram as tg
 
@@ -340,7 +341,9 @@ def procesar(u: dict):
         canal = u["channel_post"]["chat"]["id"]
         if not sync.ids()["canal"]:
             db.put("canal", canal)
-            al_usuario(f"📡 Canal de datos conectado: <code>{canal}</code>")
+            al_usuario(f"📡 Canal de datos conectado: <code>{canal}</code>" + (
+                "\n\n⚠️ En Render agrega estas variables para no perderlas al reiniciar:\n"
+                f"<code>CHAT_ID={sync.ids()['chat']}</code>\n<code>CANAL_DATOS={canal}</code>" if config.EFIMERO else ""))
             sync.publicar_registro()
         return
     m = u.get("message")
@@ -407,9 +410,13 @@ def periodicas():
             panel.generar(nuevo)
     if t - _ultimo["alertas"] > 60:
         _ultimo["alertas"] = t
+        enviados = 0
         for clave, texto, botones in alertas.pendientes(sync.dia()):
             if al_usuario(texto, botones):
                 db.marcar_aviso(clave)
+                enviados += 1
+        if enviados and config.EFIMERO:
+            sync.publicar_registro()          # guarda en Telegram qué avisos ya salieron
     if t - _ultimo["latido"] > 1800:
         _ultimo["latido"] = t
         sync.publicar_registro()
@@ -425,40 +432,69 @@ def periodicas():
         log.info("Respaldo: %s", db.respaldar())
 
 
-def main():
-    if not config.TOKEN_BOT:
-        raise SystemExit("Falta TOKEN_BOT (archivo .env).")
-    signal.signal(signal.SIGTERM, lambda *_: _apagar.__setitem__(0, True))
-    tg.llamar("deleteWebhook")
-    tg.llamar("setMyCommands", commands=[
-        {"command": c, "description": d} for c, d in [
-            ("hoy", "Resumen y jugadas del día"), ("plan", "Qué hacer con cada jugada"),
+COMANDOS = [("hoy", "Resumen y jugadas del día"), ("plan", "Qué hacer con cada jugada"),
             ("tarjetas", "Tarjetas con botones"), ("banca", "Banca, unidad y tope"),
             ("saldo", "Reportar tu saldo de BetPlay"), ("stats", "Estadísticas"),
             ("riesgo", "Simulación del plan"), ("registro", "Lo registrado hoy"),
             ("deshacer", "Borrar el último registro"), ("metodo", "Cómo decide el sistema"),
-            ("silencio", "Recordatorios de noche sí/no"), ("ayuda", "Cómo usar el bot")]])
-    offset = db.get("offset", 0)
-    log.info("Bot encendido.")
+            ("silencio", "Recordatorios de noche sí/no"), ("ayuda", "Cómo usar el bot")]
+
+
+def _procesar_seguro(u):
+    try:
+        procesar(u)
+    except Exception:
+        log.exception("Error procesando update %s", u.get("update_id"))
+
+
+def main():
+    if not config.TOKEN_BOT:
+        raise SystemExit("Falta TOKEN_BOT (variables de entorno o archivo .env).")
+    signal.signal(signal.SIGTERM, lambda *_: _apagar.__setitem__(0, True))
+    tg.llamar("setMyCommands", commands=[{"command": c, "description": d} for c, d in COMANDOS])
+    if config.EFIMERO:
+        sync.restaurar()
     panel.salud(True, "arrancando")
-    while not _apagar[0]:
-        try:
-            ups = tg.llamar("getUpdates", offset=offset, timeout=25, reintentos=1,
-                            allowed_updates=["message", "callback_query", "channel_post"]) or []
-            for u in ups:
-                offset = u["update_id"] + 1
-                db.put("offset", offset)
+    if config.PUERTO:
+        web.arrancar(config.PUERTO)
+
+    if config.MODO == "webhook" and config.URL_PUBLICA:
+        url = f"{config.URL_PUBLICA.rstrip('/')}/telegram/{web.secreto()}"
+        ok = tg.llamar("setWebhook", url=url, secret_token=web.secreto(), max_connections=5,
+                       allowed_updates=["message", "callback_query", "channel_post"])
+        log.info("Modo webhook (%s)", "activo" if ok else "FALLÓ setWebhook")
+        while not _apagar[0]:
+            try:
                 try:
-                    procesar(u)
-                except Exception:
-                    log.exception("Error procesando update %s", u.get("update_id"))
-            periodicas()
-        except KeyboardInterrupt:
-            break
-        except Exception:
-            log.exception("Error en el bucle; reintento en 5 s")
-            panel.salud(False, "error en el bucle")
-            time.sleep(5)
+                    _procesar_seguro(web.cola.get(timeout=5))
+                    while not web.cola.empty():
+                        _procesar_seguro(web.cola.get_nowait())
+                except queue.Empty:
+                    pass
+                periodicas()
+            except Exception:
+                log.exception("Error en el bucle")
+                panel.salud(False, "error en el bucle")
+                time.sleep(5)
+    else:
+        tg.llamar("deleteWebhook")
+        offset = db.get("offset", 0)
+        log.info("Modo polling")
+        while not _apagar[0]:
+            try:
+                ups = tg.llamar("getUpdates", offset=offset, timeout=25, reintentos=1,
+                                allowed_updates=["message", "callback_query", "channel_post"]) or []
+                for u in ups:
+                    offset = u["update_id"] + 1
+                    db.put("offset", offset)
+                    _procesar_seguro(u)
+                periodicas()
+            except KeyboardInterrupt:
+                break
+            except Exception:
+                log.exception("Error en el bucle; reintento en 5 s")
+                panel.salud(False, "error en el bucle")
+                time.sleep(5)
     log.info("Bot apagado.")
 
 

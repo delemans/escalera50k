@@ -17,7 +17,7 @@ Mesa de análisis de fútbol por **valor esperado** + **bot de Telegram 24/7**. 
 ```
  ┌──────────────────────────┐   dia.json fijado    ┌──────────────────────────┐
  │ Tarea programada (Claude)│ ───────────────────▶ │ Bot 24/7 (tu servidor)   │──▶ Telegram
- │ 06:59 · 13:47 · 21:47    │                      │  SQLite · panel · alertas │──▶ https://tu-dominio
+ │ 06:59 · 13:47 · 21:47    │                      │  SQLite · panel · alertas │──▶ https://escalera.dctecnology.xyz
  │ recolecta web → CLI      │ ◀─────────────────── │                          │
  └──────────────────────────┘ registro.json fijado └──────────────────────────┘
           │ clona este repo y corre `escalera analizar` (las cuentas las hace el código)
@@ -59,6 +59,10 @@ tests/                   ← 31 pruebas
 
 ## Puesta en producción (unos 30 minutos)
 
+> 🆓 **Sin tarjeta y sin PC:** sigue [INSTALAR_RENDER.md](INSTALAR_RENDER.md) (Render gratis + tu dominio de Hostinger).
+>
+> 📱 **¿Sin PC?** Sigue [INSTALAR_DESDE_CELULAR.md](INSTALAR_DESDE_CELULAR.md): todo desde el navegador del celular, el servidor se instala solo con `despliegue/oracle-cloud-init.sh` y se actualiza solo desde GitHub cada 10 minutos.
+
 ### 1. Publica el repositorio en GitHub
 ```bash
 bash scripts/publicar_github.sh escalera50k      # necesita gh (cli.github.com)
@@ -69,7 +73,7 @@ El `.env` nunca se sube: está en `.gitignore`.
 1. Crea una cuenta en cloud.oracle.com (puede pedir tarjeta para verificar identidad; los recursos Always Free no se cobran).
 2. Compute → Instances → Create: **Ubuntu 22.04**, forma **VM.Standard.A1.Flex** (ARM, 1 OCPU y 6 GB alcanzan). Descarga la llave SSH.
 3. En la VCN, en Security List, agrega reglas de entrada para TCP **80** y **443**.
-4. En tu dominio, crea un registro **A**: `escalera.tudominio.com → IP pública del servidor`.
+4. En tu dominio, crea un registro **A**: `escalera.dctecnology.xyz → IP pública del servidor`.
 
 > Otras opciones gratis o casi gratis: Google Cloud e2-micro (free tier), o cualquier VPS de unos 5 USD/mes.
 
@@ -93,7 +97,7 @@ En GitHub → Settings → Secrets → Actions: `SERVIDOR_IP`, `SERVIDOR_USUARIO
 En la app de Claude, abre cada tarea y pega `tarea/prompt_manana.md` (06:59) y `tarea/prompt_revision.md` (13:47 y 21:47). Llena `REPO`, `TOKEN_BOT`, `CHAT_ID` y `CANAL_DATOS`.
 
 ### 7. Monitoreo (opcional, gratis)
-UptimeRobot → monitor HTTP a `https://tu-dominio/salud.json`. Si el bot se cae, te llega un correo.
+UptimeRobot → monitor HTTP a `https://escalera.dctecnology.xyz/salud.json`. Si el bot se cae, te llega un correo.
 
 ## Uso diario
 

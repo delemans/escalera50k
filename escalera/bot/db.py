@@ -172,3 +172,20 @@ def respaldar() -> str:
     for v in viejos:
         v.unlink()
     return str(destino)
+
+
+# ---- estado mínimo para sobrevivir a reinicios con disco efímero ----------
+def avisos_desde(ts: float) -> list[str]:
+    with _lock:
+        return [r["clave"] for r in con().execute("SELECT clave FROM avisos WHERE cuando >= ?", (ts,))]
+
+
+def confirmaciones(fecha: str) -> dict:
+    with _lock:
+        filas = con().execute("SELECT ref, estado FROM confirmacion WHERE fecha=?", (fecha,)).fetchall()
+    return {f["ref"]: f["estado"] for f in filas}
+
+
+def vacia() -> bool:
+    with _lock:
+        return con().execute("SELECT COUNT(*) n FROM kv").fetchone()["n"] == 0

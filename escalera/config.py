@@ -55,6 +55,14 @@ PREGUNTAR_MIN_DESPUES = _int("PREGUNTAR_MIN_DESPUES", 5)
 RACHA_ALERTA = _int("RACHA_ALERTA", 3)
 SILENCIO = os.environ.get("SILENCIO", "23:00-06:30")   # sin recordatorios en ese horario
 
+# Servidor web propio (Render u otro PaaS): webhook de Telegram + panel + salud
+PUERTO = _int("PORT", 0)                                   # Render define PORT
+URL_PUBLICA = os.environ.get("URL_PUBLICA") or os.environ.get("RENDER_EXTERNAL_URL", "")
+MODO = os.environ.get("MODO", "webhook" if URL_PUBLICA else "polling")
+EFIMERO = bool(os.environ.get("RENDER")) or os.environ.get("DISCO_EFIMERO") == "1"
+PANEL_USUARIO = os.environ.get("PANEL_USUARIO", "admin")
+PANEL_CLAVE = os.environ.get("PANEL_CLAVE", "")
+
 DATOS = Path(os.environ.get("DATOS_DIR", RAIZ / "datos"))
 PANEL = Path(os.environ.get("PANEL_DIR", DATOS / "panel"))
 for d in (DATOS, PANEL, DATOS / "respaldos"):

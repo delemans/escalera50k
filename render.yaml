@@ -1,0 +1,31 @@
+# Render Blueprint · Escalera 50K en el plan GRATIS (sin tarjeta)
+# Render → New → Blueprint → elige este repositorio. Te pedirá los valores marcados con sync:false.
+services:
+  - type: web
+    name: escalera50k
+    runtime: python
+    plan: free
+    region: oregon
+    buildCommand: pip install .
+    startCommand: python -m escalera.bot.app
+    healthCheckPath: /salud
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: DATOS_DIR
+        value: /tmp/escalera
+      - key: BANCA_INICIAL
+        value: "100000"
+      - key: CLAUDE_MODEL
+        value: claude-sonnet-4-5
+      - key: TOKEN_BOT
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: PANEL_CLAVE
+        sync: false
+      - key: CHAT_ID
+        sync: false
+      - key: CANAL_DATOS
+        sync: false
