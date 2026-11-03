@@ -39,9 +39,7 @@ _apagar = [False]
 # ---------------------------------------------------------------------------
 def al_usuario(texto, botones=None, silencioso=False):
     chat = sync.ids()["chat"]
-    res = tg.enviar(chat, texto, botones, silencioso) if chat else None
-    replicar(texto)
-    return res
+    return tg.enviar(chat, texto, botones, silencioso) if chat else None
 
 
 # ---------------------------------------------------------------------------
@@ -56,12 +54,29 @@ def codigo_invitacion() -> str:
     return config.CODIGO_OBSERVADOR or "ver" + hashlib.sha256(("obs:" + config.TOKEN_BOT).encode()).hexdigest()[:10]
 
 
-def replicar(texto):
+def _espejo(chat_id, texto):
+    """Todo lo que el bot le manda al dueño, también le llega a cada observador (sin botones)."""
+    if str(chat_id) != str(sync.ids()["chat"]):
+        return
     for cid in list(observadores()):
-        tg.enviar(cid, "👁 " + texto, None, silencioso=True)
+        tg.llamar("sendMessage", chat_id=cid, text=("🤖 " + texto)[:4096], parse_mode="HTML",
+                  disable_web_page_preview=True, disable_notification=True, reintentos=1)
 
 
-LECTURA = {"/hoy", "/plan", "/boletos", "/informe", "/escalera", "/mis", "/stats", "/riesgo", "/metodo", "/ayuda", "/fase2"}
+tg.espejo = _espejo
+
+
+def reenviar_a_observadores(m):
+    """Lo que escribe el dueño (texto, pantallazo, voz) se reenvía tal cual a los observadores."""
+    for cid in list(observadores()):
+        tg.llamar("forwardMessage", chat_id=cid, from_chat_id=m["chat"]["id"], message_id=m["message_id"],
+                  disable_notification=True, reintentos=1)
+
+
+AYUDA_OBSERVADOR = ("👁 <b>Modo lectura · DCBET</b>\n━━━━━━━━━━━━━━━━\n"
+                    "Ves todo: lo que publica el bot, lo que escribe el dueño y lo que el bot le responde.\n"
+                    "No puedes registrar apuestas, tocar botones ni conversar con la IA.\n\n"
+                    "Puedes usar:\n/ayuda · esta ayuda\n/app · abrir el portal DCBET")
 
 
 def atender_observador(m, chat_id, texto):
@@ -72,23 +87,18 @@ def atender_observador(m, chat_id, texto):
             obs[str(chat_id)] = {"nombre": nombre, "desde": sync.ahora().strftime("%d/%m %H:%M")}
             db.put("observadores", obs)
             al_usuario(f"👁 <b>{M.e(nombre)}</b> entró en modo lectura. Para sacarlo: <code>/quitar {chat_id}</code>")
-        tg.enviar(chat_id, "👁 <b>Modo lectura activado</b>\nVas a recibir una copia de todo lo que publica el bot: plan, "
-                           "boletos, avisos en vivo y resultados.\nPuedes usar /hoy /plan /boletos /informe /escalera.\n"
-                           "<i>No puedes registrar apuestas ni tocar botones.</i>")
+        tg.enviar(chat_id, AYUDA_OBSERVADOR)
         return True
     if str(chat_id) in obs:
         c = texto.split()[0].split("@")[0].lower() if texto else ""
-        if c == "/hoy":
-            dia = sync.dia()
-            if not dia:
-                tg.enviar(chat_id, "Todavía no hay jugadas de hoy.")
-            for x in (M.resumen(dia), M.plan(dia), M.boletos(dia), M.mis_apuestas(dia)) if dia else ():
-                if x:
-                    tg.enviar(chat_id, x, silencioso=True)
-        elif c in LECTURA:
-            cmd(texto, chat_id)
+        if c in ("/ayuda", "/help", "/start"):
+            tg.enviar(chat_id, AYUDA_OBSERVADOR)
+        elif c == "/app":
+            url = panel.url_app(chat_id)
+            tg.enviar(chat_id, "📱 <b>Portal DCBET</b> (solo lectura)", [[{"text": "📱 Abrir el portal", "web_app": {"url": url}}]]
+                      if url else None)
         else:
-            tg.enviar(chat_id, "👁 Estás en modo lectura: solo puedes consultar (/hoy /plan /boletos /informe /escalera).")
+            tg.enviar(chat_id, "👁 Estás en modo lectura: solo puedes usar /ayuda o /app.")
         return True
     return False
 
@@ -459,6 +469,8 @@ def procesar(u: dict):
         if not atender_observador(m, chat_id, (m.get("text") or "").strip()):
             tg.enviar(chat_id, "Este bot es privado.")
         return
+    if observadores():
+        reenviar_a_observadores(m)
     texto = (m.get("text") or m.get("caption") or "").strip()
     if texto.startswith("/") and cmd(texto, chat_id):
         return

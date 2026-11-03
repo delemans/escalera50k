@@ -14,6 +14,7 @@ from .. import config
 log = logging.getLogger("telegram")
 _sesion = requests.Session()
 _ultimo_envio = [0.0]
+espejo = None          # función (chat_id, texto) que replica a observadores lo que se envía al dueño
 
 
 def _api():
@@ -79,6 +80,11 @@ def enviar(chat_id, texto: str, botones=None, silencioso=False):
         extra = {"reply_markup": {"inline_keyboard": botones}} if botones and i == len(partes) - 1 else {}
         res = llamar("sendMessage", chat_id=chat_id, text=p, parse_mode="HTML",
                      disable_web_page_preview=True, disable_notification=silencioso, **extra)
+    if espejo:
+        try:
+            espejo(chat_id, texto)
+        except Exception as ex:
+            log.warning("espejo: %s", ex)
     return res
 
 

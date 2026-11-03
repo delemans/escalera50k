@@ -132,6 +132,11 @@ def test_observador_modo_lectura(entorno):
     assert 111 in destinos and "777" in destinos
     app.procesar({"message": {"message_id": 51, "chat": {"id": 777, "type": "private"}, "text": "hice 1"}})
     assert "modo lectura" in textos(env)[-1]
+    antes = len(env)
+    app.procesar({"message": {"message_id": 60, "chat": {"id": 111, "type": "private"}, "text": "/banca"}})
+    metodos = [(m, p.get("chat_id")) for m, p in env[antes:]]
+    assert ("forwardMessage", "777") in metodos                    # ve lo que escribe el dueño
+    assert ("sendMessage", "777") in metodos                       # y lo que el bot le responde
     app.procesar({"message": {"message_id": 52, "chat": {"id": 888, "type": "private"}, "text": "/start malo"}})
     assert textos(env)[-1] == "Este bot es privado."
     app.procesar({"message": {"message_id": 53, "chat": {"id": 111, "type": "private"}, "text": "/quitar 777"}})
