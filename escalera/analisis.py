@@ -16,8 +16,11 @@ import re
 
 from .nucleo import estadisticas as EST
 from .nucleo import jugadas as JUG
+from .nucleo import justificacion as JUS
 from .nucleo import liquidacion as LIQ
+from .nucleo import mercados as MK
 from .nucleo import probabilidad as PR
+from .nucleo import riesgo as RIESGO
 from .nucleo import simulacion as SIM
 from .nucleo import staking as STK
 from .nucleo import validacion as VAL
@@ -69,51 +72,79 @@ def liga_principal(liga: str) -> bool:
 
 
 def candidatos_statarea(filas: list[dict], umbral: int = 50, hora_min: str = "07:30",
-                        maximo: int = 15) -> list[dict]:
+                        maximo: int = 30) -> list[dict]:
+    """Qué buscar en el mercado, por partido y por mercado (1X2, DNB, goles, ambos marcan).
+    La tarea busca cuotas solo de estos; tarjetas y córners los agrega ella si encuentra líneas."""
     out = []
     for f in filas:
         if f["time"] < hora_min or not liga_principal(f["league"]):
             continue
-        for lado, prob, equipo in (("1", f["p1"], f["home"]), ("2", f["p2"], f["away"])):
+        base = {"h": f["home"], "a": f["away"], "lg": f["league"], "t": f["time"], "statarea": f}
+        p1, px, p2 = f["p1"], f["pX"], f["p2"]
+        for lado, prob in (("1", p1), ("2", p2)):
             if prob >= umbral:
-                out.append({"h": f["home"], "a": f["away"], "lg": f["league"], "t": f["time"],
-                            "lado": lado, "sel": f"Gana {equipo}", "sa": prob / 100})
-    out.sort(key=lambda c: -c["sa"])
+                out.append({**base, "mercado": "1X2", "lado": lado, "fuerza": prob / 100})
+            cond = prob / max(1, p1 + p2)
+            if 42 <= prob < umbral and cond >= 0.62:
+                out.append({**base, "mercado": "DNB", "lado": lado, "fuerza": cond * (1 - px / 100)})
+        if f["o25"] >= 62:
+            out.append({**base, "mercado": "GOLES", "linea": 2.5, "lado": "over", "fuerza": f["o25"] / 100})
+        elif f["o25"] <= 38:
+            out.append({**base, "mercado": "GOLES", "linea": 2.5, "lado": "under", "fuerza": 1 - f["o25"] / 100})
+        if f["bts"] >= 62:
+            out.append({**base, "mercado": "BTTS", "lado": "si", "fuerza": f["bts"] / 100})
+        elif f["bts"] <= 38:
+            out.append({**base, "mercado": "BTTS", "lado": "no", "fuerza": f["ots"] / 100})
+    for c in out:
+        c["sel"] = MK.describir(c)
+        c["sa"] = MK.prob_statarea(c)
+    out.sort(key=lambda c: -c["fuerza"])
     return out[:maximo]
 
 
 def evaluar(c: dict) -> dict:
-    """c = candidato + casas [{bk, o:[1, X, 2]}] (+ noticias, alerta). Agrega cálculo y motivo."""
+    """c = candidato con "mercado", "lado", "linea", "casas" [{bk, o:[…]}] (+ casas1x2, noticias, alerta)."""
     c = dict(c)
-    idx = 0 if c.get("lado", "1") == "1" else 2
+    c.setdefault("mercado", "1X2")
+    c.setdefault("sel", MK.describir(c))
     try:
-        cs = PR.consenso(c.get("casas") or [], idx)
-    except ValueError:
-        c.update(mk=None, p=None, motivo="Sin cuotas confiables", descartado=True)
+        r = MK.prob_mercado(c)
+    except (ValueError, KeyError, TypeError, IndexError):
+        c.update(mk=None, p=None, ev=None, motivo="Sin cuotas confiables", descartado=True, valor=False)
+        c["justificacion"] = {"aFavor": [], "enContra": ["No se encontraron cuotas confiables."],
+                              "confianza": 1, "etiqueta": "NO", "resumen": "Sin cuotas confiables."}
         return c
-    mk = cs.prob
-    p = PR.mezcla(mk, c["sa"], PESO_MERCADO)
-    o = cs.mejor_cuota
-    c.update(mk=round(mk, 4), p=round(p, 4), o=o, bk=cs.mejor_casa, nCasas=cs.n_casas,
-             dispersion=round(cs.dispersion, 4), margen=round(cs.margen_medio, 4),
-             mkShin=round(cs.por_metodo["shin"], 4),
-             ev=round(V.ev(p, o), 4), omin=round(V.cuota_minima(p), 3),
-             valor=V.ev(p, o) >= V.MARGEN_VALOR, alerta=bool(c.get("alerta")))
+    mk = r["p_gana"]
+    sa = MK.prob_statarea(c) if c.get("statarea") else c.get("sa")
+    p = PR.mezcla(mk, sa, PESO_MERCADO) if sa is not None else mk
+    p_push, o = r["p_push"], r["o"]
+    e = MK.ev(p, p_push, o)
+    c.update(mk=round(mk, 4), sa=None if sa is None else round(sa, 4), p=round(p, 4), p_push=round(p_push, 4),
+             o=o, bk=r["bk"], nCasas=r["n"], dispersion=round(r["dispersion"], 4), afilada=r["afilada"],
+             ev=round(e, 4), omin=round(MK.cuota_minima(p, p_push), 3), kelly=round(MK.kelly(p, p_push, o), 4),
+             valor=e >= V.MARGEN_VALOR, alerta=bool(c.get("alerta")), soloMercado=sa is None)
     motivo = None
-    if abs(c["sa"] - mk) > DESVIO_MAX:
-        motivo = f"Desvío StatArea−mercado {(c['sa'] - mk) * 100:+.1f} pts".replace(".", ",").replace("-", "−")
-    elif cs.dispersion > DISPERSION_MAX:
+    if sa is not None and abs(sa - mk) > DESVIO_MAX:
+        motivo = f"Desvío StatArea−mercado {(sa - mk) * 100:+.1f} pts".replace(".", ",").replace("-", "−")
+    elif r["dispersion"] > DISPERSION_MAX:
         motivo = "Las casas no coinciden (dispersión alta)"
     elif c["alerta"]:
         motivo = "Vetado por noticias"
     c["motivo"] = motivo
     c["descartado"] = motivo is not None
+    c["justificacion"] = JUS.justificar(c)
+    c["confianza"] = c["justificacion"]["confianza"]
+    if motivo:
+        c["justificacion"]["etiqueta"] = "DESCARTADO"
+        c["justificacion"]["enContra"].insert(0, motivo + ".")
+    c.pop("statarea", None)
     return c
 
 
 def _pick_publico(c: dict) -> dict:
-    claves = ["id", "h", "a", "lg", "t", "sel", "o", "bk", "sa", "mk", "p", "ev", "omin",
-              "valor", "noticias", "alerta", "motivo", "nCasas", "dispersion"]
+    claves = ["id", "h", "a", "lg", "t", "mercado", "lado", "linea", "sel", "o", "bk", "sa", "mk", "p", "p_push",
+              "ev", "omin", "kelly", "valor", "noticias", "alerta", "motivo", "nCasas", "dispersion", "afilada",
+              "soloMercado", "confianza", "justificacion"]
     return {k: c.get(k) for k in claves}
 
 
@@ -189,6 +220,22 @@ def construir_dia(entrada: dict) -> dict:
            "semaforo": EST.semaforo(filas_previas, hoy=fecha),
            "progresionCfg": prog_cfg, "sitio": entrada.get("sitio"), "publicacion": "manana"}
     plan = STK.plan_del_dia(dia, pol)
+    # Gestión de riesgo (stop-loss, enfriamiento, modo reducido) sobre tus apuestas reales
+    rg = RIESGO.evaluar(filas_previas, pol.banca, fecha, ini_real)
+    ec = RIESGO.escalera_crecimiento(prog_cfg) if prog_cfg.get("activo") else None
+    for i in plan:
+        if i.tipo == "progresion" and ec and i.monto:
+            i.monto = ec["stake"]
+            if ec["asegurado"]:
+                i.razon = f"Modo seguro: apartas la base ({pesos(ec['asegurado'])}) y reinviertes solo lo ganado."
+        if rg["factor"] < 1 and i.monto:
+            if rg["factor"] == 0:
+                i.monto, i.accion, i.razon = 0, "NO", "STOP del día por pérdidas: hoy no se apuesta más."
+            else:
+                i.monto = pol.redondear(i.monto * rg["factor"])
+                i.razon += " (stake al 50 % por gestión de riesgo)"
+    dia["riesgo"] = {k: v for k, v in rg.items() if k != "alertas"}
+    dia["escaleraCrec"] = ec
     dia["plan"] = [i.dict() for i in plan]
     dia["politica"] = {"banca": pol.banca, "unidad": pol.unidad, "tope": pol.tope_diario, "freno": pol.freno}
 
@@ -213,8 +260,14 @@ def construir_dia(entrada: dict) -> dict:
         if len(cur) > 120:
             dia["estadisticas"][k]["curva"] = cur[:: max(1, len(cur) // 120)] + [cur[-1]]
 
+    dia["porQue"] = {k: JUS.por_que_jugada(k, jug.get(k)) for k in ("escalera", "combinada", "super", "progresion")}
+    dia["misApuestas"] = [
+        {k: f.get(k) for k in ("id", "fecha", "hora", "partido", "seleccion", "mercado", "lado", "linea", "piernas",
+                               "cuotaReal", "stakeReal", "resultado", "marcador", "netoReal", "cupon", "tipo")}
+        for f in filas_previas if f.get("real") and (f.get("resultado") == "pendiente" or f.get("fecha") == fecha)]
     dia["veredicto"] = veredicto(dia, avisos, bool(sa_filas))
-    dia["alertas"] = [{"nivel": "amarillo", "t": a} for a in avisos]
+    dia["alertas"] = rg["alertas"] + [{"nivel": "amarillo", "t": a} for a in avisos] + \
+        [{"nivel": "amarillo", "t": a} for a in ((ec or {}).get("avisos") or [])]
     if pol.freno:
         dia["alertas"].insert(0, {"nivel": "rojo", "t": "Banca real bajo el 70 %: stakes reales a la mitad."})
     return {"dia": dia, "apuestasNuevas": [f for f in nuevas if f["id"] not in {x.get("id") for x in filas_previas}]}
@@ -268,20 +321,49 @@ def resultado_seleccion(sel: str, partido: str, marcador: str | None) -> str:
     raise ValueError(f"No sé si '{sel}' es local o visitante en '{partido}'")
 
 
+def _marcador(valor) -> tuple[str | None, dict]:
+    """'2-1' o {"marcador": "2-1", "tarjetas": 5, "corners": 9} → (texto, extras)."""
+    if isinstance(valor, dict):
+        return valor.get("marcador"), {k: valor[k] for k in ("tarjetas", "corners") if valor.get(k) is not None}
+    return valor, {}
+
+
+def resultado_pierna(p: dict, valor) -> str:
+    marcador, extras = _marcador(valor)
+    if not marcador:
+        return "pendiente"
+    if str(marcador).lower() in ("aplazado", "suspendido", "nulo", "cancelado"):
+        return "nulo"
+    if not p.get("mercado") or (p["mercado"] == "1X2" and not p.get("lado")):
+        return resultado_seleccion(p["sel"], p["partido"], marcador)
+    m = re.match(r"\s*(\d+)\s*[-–:]\s*(\d+)", str(marcador))
+    if not m:
+        return "pendiente"
+    return MK.resultado(p["mercado"], p.get("lado"), p.get("linea"), int(m.group(1)), int(m.group(2)), extras)
+
+
 def liquidar_filas(filas: list[dict], marcadores: dict, progresion: dict | None = None) -> dict:
-    """marcadores = {"Local vs Visitante": "2-1" | "aplazado"}. Devuelve filas cambiadas."""
+    """marcadores = {"Local vs Visitante": "2-1" | "aplazado" | {"marcador": "2-1", "tarjetas": 5, "corners": 9}}."""
     cambios, prog = [], progresion
     for f in filas:
         if f.get("resultado") != "pendiente":
             continue
-        piernas = f.get("piernas") or [{"sel": f["seleccion"], "partido": f["partido"]}]
-        res = [resultado_seleccion(p["sel"], p["partido"], marcadores.get(p["partido"])) for p in piernas]
-        r = LIQ.liquidar({**f, "piernas": f.get("piernas") or [{"o": f["cuotaRef"]}]}, res)
+        piernas = f.get("piernas") or [{"sel": f["seleccion"], "partido": f["partido"], "mercado": f.get("mercado"),
+                                        "lado": f.get("lado"), "linea": f.get("linea")}]
+        res = [resultado_pierna(p, marcadores.get(p["partido"])) for p in piernas]
+        solo_real = not f.get("simulada")
+        base = {**f, "stake": f.get("stakeReal") if solo_real else f.get("stake"),
+                "cuotaRef": (f.get("cuotaReal") or f.get("cuotaRef")) if solo_real else f.get("cuotaRef"),
+                "piernas": f.get("piernas") or [{"o": f.get("cuotaReal") if solo_real else f["cuotaRef"]}]}
+        r = LIQ.liquidar(base, res)
         if r["resultado"] == "pendiente":
             continue
-        marc = " · ".join(marcadores.get(p["partido"], "?") for p in piernas)
+        marc = " · ".join(str(_marcador(marcadores.get(p["partido"], "?"))[0]) for p in piernas)
         nf = {**f, **r, "marcador": marc}
-        if f.get("real") and f.get("stakeReal"):
+        if solo_real:
+            nf["netoReal"] = r.get("neto", 0)
+            nf["neto"] = None
+        elif f.get("real") and f.get("stakeReal"):
             if f["tipo"] == "escalera":
                 nf["netoReal"] = round(r["neto"] * f["stakeReal"] / f["stake"]) if f.get("stake") else None
             elif r["resultado"] in ("ganado", "perdido"):
@@ -289,5 +371,5 @@ def liquidar_filas(filas: list[dict], marcadores: dict, progresion: dict | None 
                 nf["netoReal"] = round(f["stakeReal"] * (o - 1)) if r["resultado"] == "ganado" else -f["stakeReal"]
         cambios.append(nf)
         if f["tipo"] == "progresion" and prog:
-            prog = LIQ.avanzar_progresion(prog, r["resultado"], f["stake"], f["cuotaRef"])
+            prog = LIQ.avanzar_progresion(prog, r["resultado"], base["stake"], base["cuotaRef"])
     return {"filas": cambios, "progresion": prog}

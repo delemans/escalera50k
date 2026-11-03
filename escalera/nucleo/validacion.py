@@ -88,7 +88,7 @@ def validar(filas: list[dict]) -> list[dict]:
 
 def favoritos_vs_mercado(evaluados: list[dict]) -> dict:
     """Fila final: cuántos candidatos quedaron dentro del ±8 pts."""
-    con = [c for c in evaluados if c.get("mk") is not None]
+    con = [c for c in evaluados if c.get("mk") is not None and c.get("sa") is not None]
     dentro = [c for c in con if abs(c["sa"] - c["mk"]) <= 0.08]
     peores = sorted(con, key=lambda c: -abs(c["sa"] - c["mk"]))[:2]
     detalle = "; ".join(f"{c['sel'].replace('Gana ', '')} {(c['sa'] - c['mk']) * 100:+.1f}".replace(".", ",").replace("-", "−")

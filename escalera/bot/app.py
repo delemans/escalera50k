@@ -24,7 +24,7 @@ import uuid
 from .. import config
 from ..nucleo import formato as F
 from ..nucleo import staking as STK
-from . import alertas, db, ia, panel, sync, voz, web
+from . import alertas, db, en_vivo, ia, panel, sync, voz, web
 from . import mensajes as M
 from . import telegram as tg
 
@@ -78,9 +78,9 @@ def enviar_dia(dia, solo_tarjetas=False):
         return
     if not solo_tarjetas:
         al_usuario(M.resumen(dia, db.get("saldo")))
-        p = M.plan(dia)
-        if p:
-            al_usuario(p)
+        for extra in (M.plan(dia), M.mis_apuestas(dia)):
+            if extra:
+                al_usuario(extra)
     for i in dia.get("plan", []):
         estado = (db.confirmacion(dia["fecha"], i["id"]) or {}).get("estado", "pendiente")
         msg = al_usuario(M.tarjeta(dia, i), M.botones_tarjeta(i["id"], estado), silencioso=True)
@@ -106,6 +106,8 @@ def cmd(texto: str, chat_id) -> bool:
         enviar_dia(dia)
     elif c == "/plan":
         tg.enviar(chat_id, M.plan(dia) or "Hoy no hay plan.")
+    elif c in ("/mis", "/apuestas"):
+        tg.enviar(chat_id, M.mis_apuestas(dia) or "No tienes apuestas abiertas registradas.")
     elif c == "/tarjetas":
         enviar_dia(dia, solo_tarjetas=True)
     elif c == "/banca":
@@ -243,7 +245,7 @@ def resolver_espera(chat_id, texto) -> bool:
         if not o:
             return False                      # no era una cuota: pasa a la conversación
         pol = alertas.politica(sync.dia())
-        acc, monto, ev = STK.decidir_con_cuota_betplay(item["p"], o, pol, item["tipo"])
+        acc, monto, ev = STK.decidir_con_cuota_betplay(item["p"], o, pol, item["tipo"], item.get("p_push") or 0.0)
         db.put("espera", None)
         tg.enviar(chat_id, M.decision_betplay(item, o, acc, monto, ev.ev))
         return True
@@ -382,6 +384,11 @@ def procesar(u: dict):
         return
     if resolver_espera(chat_id, texto):
         return
+    mc = re.match(r"^/?(?:cobro|cashout|cash out)\s+(\$?[\d.,]+)", texto.lower())
+    if mc and F.leer_numero(mc.group(1)):
+        dia = sync.dia()
+        tg.enviar(chat_id, en_vivo.evaluar_cobro(dia, F.leer_numero(mc.group(1)), alertas.politica(dia).banca))
+        return
     rapido = atajo(texto)
     if rapido:
         proponer(chat_id, rapido, "texto")
@@ -392,7 +399,7 @@ def procesar(u: dict):
 # ---------------------------------------------------------------------------
 # Tareas periódicas
 # ---------------------------------------------------------------------------
-_ultimo = {"dia": 0.0, "alertas": 0.0, "latido": 0.0, "panel": 0.0, "respaldo": ""}
+_ultimo = {"dia": 0.0, "alertas": 0.0, "latido": 0.0, "panel": 0.0, "respaldo": "", "vivo": 0.0}
 
 
 def periodicas():
@@ -419,6 +426,14 @@ def periodicas():
                 enviados += 1
         if enviados and config.EFIMERO:
             sync.publicar_registro()          # guarda en Telegram qué avisos ya salieron
+    if t - _ultimo["vivo"] > 60:
+        _ultimo["vivo"] = t
+        try:
+            silencio = alertas.en_silencio(sync.ahora())
+            for m in en_vivo.revisar(sync.dia(), alertas.politica(sync.dia()).banca):
+                al_usuario(m, silencioso=silencio)
+        except Exception:
+            log.exception("En vivo")
     if t - _ultimo["latido"] > 1800:
         _ultimo["latido"] = t
         sync.publicar_registro()
@@ -434,7 +449,7 @@ def periodicas():
         log.info("Respaldo: %s", db.respaldar())
 
 
-COMANDOS = [("hoy", "Resumen y jugadas del día"), ("plan", "Qué hacer con cada jugada"),
+COMANDOS = [("hoy", "Resumen y jugadas del día"), ("plan", "Qué hacer con cada jugada"), ("mis", "Tus apuestas abiertas"), ("cobro", "¿Cobrar ya? /cobro 45000"),
             ("tarjetas", "Tarjetas con botones"), ("banca", "Banca, unidad y tope"),
             ("saldo", "Reportar tu saldo de BetPlay"), ("stats", "Estadísticas"),
             ("riesgo", "Simulación del plan"), ("registro", "Lo registrado hoy"),

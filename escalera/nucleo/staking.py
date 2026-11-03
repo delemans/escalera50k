@@ -35,7 +35,7 @@ class PoliticaStake:
     kelly_frac: float = 0.25
     max_unidades_sencilla: float = 1.5
     unidades: dict = field(default_factory=lambda: {
-        "escalera": 2.0, "combinada": 1.0, "super": 0.5})
+        "escalera": 2.0, "combinada": 1.0, "super": 0.0})   # soñadora = apuesta mínima
     apuesta_minima: float = 1_000
     redondeo: float = 500
     tope_diario_pct: float = 0.12
@@ -77,6 +77,7 @@ class Instruccion:
     ev: float
     razon: str
     hora: str = ""
+    p_push: float = 0.0
 
     def dict(self):
         return asdict(self)
@@ -92,8 +93,8 @@ def _accion(ev: float, pol: PoliticaStake, alerta: bool = False) -> str:
     return "NO"
 
 
-def stake_sencilla(p: float, o: float, pol: PoliticaStake) -> float:
-    k = V.kelly(p, o) * pol.kelly_frac
+def stake_sencilla(p: float, o: float, pol: PoliticaStake, k_total: float | None = None) -> float:
+    k = (V.kelly(p, o) if k_total is None else k_total) * pol.kelly_frac
     bruto = min(k * pol.banca, pol.max_unidades_sencilla * pol.unidad)
     if bruto <= 0:
         return 0
@@ -101,13 +102,21 @@ def stake_sencilla(p: float, o: float, pol: PoliticaStake) -> float:
 
 
 def decidir_con_cuota_betplay(p: float, o_betplay: float, pol: PoliticaStake,
-                              tipo: str = "sencilla") -> tuple[str, float, V.Evaluacion]:
-    """Cuando el usuario dice cuánto paga BetPlay: decisión final y monto."""
+                              tipo: str = "sencilla", p_push: float = 0.0) -> tuple[str, float, V.Evaluacion]:
+    """Cuando el usuario dice cuánto paga BetPlay: decisión final y monto (p_push = empate devuelto)."""
     ev_ = V.evaluar(p, o_betplay, pol.margen_valor)
+    if p_push:
+        from . import mercados as MK
+        e = MK.ev(p, p_push, o_betplay)
+        ev_ = V.Evaluacion(p, o_betplay, e, MK.cuota_minima(p, p_push, pol.margen_valor), (1 - p_push) / p,
+                           MK.kelly(p, p_push, o_betplay), e >= pol.margen_valor,
+                           "valor" if e >= pol.margen_valor else "justa" if e >= 0 else "negativa",
+                           "Tiene valor (contando que el empate devuelve)." if e >= pol.margen_valor
+                           else "EV negativo con esa cuota.")
     if not ev_.valor:
         return "NO", 0, ev_
     if tipo == "sencilla":
-        return "APOSTAR", stake_sencilla(p, o_betplay, pol), ev_
+        return "APOSTAR", stake_sencilla(p, o_betplay, pol, ev_.kelly if p_push else None), ev_
     return "APOSTAR", pol.redondear(pol.unidades.get(tipo, 1) * pol.unidad), ev_
 
 
@@ -122,20 +131,25 @@ def plan_del_dia(dia: dict, pol: PoliticaStake) -> list[Instruccion]:
         if not p:
             continue
         acc = _accion(p["ev"], pol, p.get("alerta"))
-        monto = stake_sencilla(p["p"], p["o"], pol) if acc == "APOSTAR" else 0
+        monto = stake_sencilla(p["p"], p["o"], pol, p.get("kelly")) if acc == "APOSTAR" else 0
         razon = {"APOSTAR": f"EV {_pct(p['ev'])} con la cuota de referencia.",
                  "VIGILAR": "Casi justa: solo si BetPlay paga la mínima.",
                  "NO": "EV negativo o alerta: se sigue en simulación."}[acc]
         out.append(Instruccion(pid, "sencilla", f"{n} · {p['sel']}", acc, monto, p["o"],
                                p.get("omin") or V.cuota_minima(p["p"]), p["p"], p["ev"],
-                               razon, p.get("t", "")))
+                               razon, p.get("t", ""), p.get("p_push") or 0.0))
 
-    for clave, nombre in (("escalera", "Escalera"), ("combinada", "Combinada"), ("super", "Súper")):
+    for clave, nombre in (("escalera", "Escalera"), ("combinada", "Combinada"), ("super", "Soñadora")):
         j = jug.get(clave)
         if not j:
             continue
         acc = _accion(j["ev"], pol)
-        monto = pol.redondear(pol.unidades[clave] * pol.unidad) if acc == "APOSTAR" else 0
+        if acc != "APOSTAR":
+            monto = 0
+        elif clave == "super":
+            monto = pol.apuesta_minima                      # gasto fijo y mínimo
+        else:
+            monto = pol.redondear(pol.unidades[clave] * pol.unidad)
         if clave == "escalera":
             cref = 1.0
             for x in j["patas"]:
@@ -151,7 +165,7 @@ def plan_del_dia(dia: dict, pol: PoliticaStake) -> list[Instruccion]:
     pr = jug.get("progresion")
     if pr:
         acc = _accion(pr["ev"], pol)
-        out.append(Instruccion(pr["id"], "progresion", f"Progresión · paso {pr['paso']}", acc,
+        out.append(Instruccion(pr["id"], "progresion", f"Escalera de crecimiento · peldaño {pr['paso']}", acc,
                                pr["stake"] if acc == "APOSTAR" else 0, pr["patas"][0]["o"],
                                round(V.cuota_minima(pr["P"], pol.margen_valor), 3), pr["P"], pr["ev"],
                                "Reto aparte con su propio fondo: no cuenta en el tope ni en el plan diario.",

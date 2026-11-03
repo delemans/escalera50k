@@ -41,6 +41,11 @@ EL PLAN (en dia.plan): cada jugada trae accion, monto sugerido, cuota_min y raz�
 - APOSTAR: EV ≥ +2 % con la cuota de referencia → apostar el monto SOLO si BetPlay paga ≥ cuota_min.
 - VIGILAR: casi justa → solo si BetPlay paga ≥ cuota_min (pide la cuota y usa evaluar_cuota).
 - NO: EV negativo o alerta → no apostar; solo se simula.
+Categorías: individuales con valor (sencillas), escalera, combinada, soñadora (= "super", cuota alta y stake mínimo) y progresión.
+Mercados: 1X2, DNB (empate no apuesta: si empatan devuelven la plata), doble oportunidad, goles más/menos, ambos marcan, tarjetas y córners. Para tarjetas y córners no hay modelo estadístico: el valor sale solo de comparar casas; dilo.
+Cuando pregunten "¿por qué?", usa porQue / enContra del pick (no inventes otras razones).
+Cobro anticipado: si te dicen cuánto ofrece BetPlay, usa evaluar_cobro. Gestión de riesgo: respeta dia.riesgo (stop, reducido) y nunca sugieras subir el monto para recuperar pérdidas.
+misApuestas = lo que el usuario YA apostó en BetPlay; si una supera 2 unidades, recuérdaselo con tacto.
 Numeración: "la 1", "la 3" = sencillas 1 y 3 del día (ids AAAA-MM-DD-1…). Escalera -esc, progresión -prog, combinada -combi, súper -super.
 
 REGISTRO
@@ -49,7 +54,9 @@ REGISTRO
 - Si algo del pantallazo no se lee con seguridad (cuota, valor, equipos), déjalo en null, ponlo en "dudas" y pide un pantallazo más nítido.
 - Después de registrar, resume en una línea; el bot muestra el detalle con botones para confirmar.
 
-FORMATO: texto plano, emojis sobrios (🟢 🟡 ⚪ ✅ ❌ ⚠️ 📈). Sin Markdown, sin asteriscos, sin tablas. Coma decimal ($7.500, 1,45, 72 %)."""
+MONEDA: todo es en pesos colombianos ($3.000 = tres mil pesos), nunca USD ni dólares.
+
+FORMATO: texto plano (prohibido usar ** o #), emojis sobrios (🟢 🟡 ⚪ ✅ ❌ ⚠️ 📈). Sin Markdown, sin asteriscos, sin tablas. Coma decimal ($7.500, 1,45, 72 %)."""
 
 HERRAMIENTAS = [
     {"name": "registrar_apuestas",
@@ -69,6 +76,10 @@ HERRAMIENTAS = [
      "description": "Con la cuota que paga BetPlay para una jugada del plan (ref) o una probabilidad p, devuelve EV, cuota mínima, decisión y monto.",
      "input_schema": {"type": "object", "required": ["cuota"], "properties": {
          "ref": {"type": ["string", "null"]}, "p": {"type": ["number", "null"]}, "cuota": {"type": "number"}}}},
+    {"name": "evaluar_cobro",
+     "description": "Cuando el usuario dice cuánto le ofrece BetPlay de cobro anticipado (cash out) por una combinada o soñadora abierta: compara con el valor justo y dice COBRAR / PARCIAL / AGUANTAR.",
+     "input_schema": {"type": "object", "required": ["oferta"], "properties": {
+         "oferta": {"type": "number"}, "ref": {"type": ["string", "null"]}}}},
     {"name": "simular_riesgo",
      "description": "Monte Carlo de largo plazo: probabilidad de caer 30 % / 50 % con la política de stakes.",
      "input_schema": {"type": "object", "properties": {
@@ -86,21 +97,59 @@ def ejecutar_herramienta(nombre: str, args: dict, dia: dict, pol: STK.PoliticaSt
         p = args.get("p") or (item or {}).get("p")
         if not p:
             return {"error": "No encuentro esa jugada; dime cuál es (número o tipo)."}
-        acc, monto, ev = STK.decidir_con_cuota_betplay(p, args["cuota"], pol, (item or {}).get("tipo", "sencilla"))
+        acc, monto, ev = STK.decidir_con_cuota_betplay(p, args["cuota"], pol, (item or {}).get("tipo", "sencilla"),
+                                                       (item or {}).get("p_push") or 0.0)
         return {"decision": acc, "monto": monto, "ev": round(ev.ev, 4), "cuotaMinima": round(ev.omin, 2),
                 "veredicto": ev.texto, "jugada": (item or {}).get("titulo")}
+    if nombre == "evaluar_cobro":
+        from . import en_vivo
+        return {"respuesta": en_vivo.evaluar_cobro(dia, args.get("oferta") or 0, pol.banca, args.get("ref"))}
     if nombre == "simular_riesgo":
         return SIM.largo_plazo(args.get("ev", 0.0), args.get("apuestas_dia", 2), pol.unidad_pct,
                                args.get("cuota_media", 1.6), args.get("dias", 60), caminos=1500)
     return {"error": "herramienta desconocida"}
 
 
+def _compacto_dia(dia: dict) -> dict:
+    """Resumen corto del día (los planes gratis tienen pocos tokens por minuto)."""
+    if not dia:
+        return {}
+    picks = [{**{k: p.get(k) for k in ("id", "h", "a", "lg", "t", "mercado", "sel", "o", "bk", "p", "p_push", "ev",
+                                        "omin", "valor", "confianza", "noticias", "alerta", "motivo")},
+              "porQue": (p.get("justificacion") or {}).get("aFavor", [])[:3],
+              "enContra": (p.get("justificacion") or {}).get("enContra", [])[:2]} for p in dia.get("picks", [])]
+    jug = {}
+    for k, j in (dia.get("jugadas") or {}).items():
+        if not j:
+            continue
+        if k == "sencillas":
+            jug[k] = j.get("ids")
+        else:
+            jug[k] = {x: j.get(x) for x in ("id", "cuota", "P", "ev", "final", "montos", "reto", "paso",
+                                             "saldo", "meta", "Pmeta") if j.get(x) is not None}
+            jug[k]["patas"] = [f"{p['t']} {p['sel']} @{p['o']} ({p['id']})" for p in j.get("patas", [])]
+    est = {}
+    for k, e in (dia.get("estadisticas") or {}).items():
+        if e and e.get("n"):
+            est[k] = {x: e.get(x) for x in ("n", "aciertos", "esperado", "roi", "beneficio", "pValor",
+                                             "brier", "maxDrawdown")}
+    return {"fecha": dia.get("fecha"), "veredicto": (dia.get("veredicto") or {}).get("texto"),
+            "plan": [{k: i.get(k) for k in ("id", "titulo", "tipo", "hora", "accion", "monto", "cuota_ref",
+                                             "cuota_min", "p", "p_push", "ev", "razon")} for i in dia.get("plan", [])],
+            "misApuestas": dia.get("misApuestas"), "porQueJugadas": dia.get("porQue"),
+            "picks": picks, "jugadas": jug, "bancas": dia.get("bancas"), "politica": dia.get("politica"),
+            "liquidado": dia.get("liquidado"), "alertas": dia.get("alertas"), "semaforo": dia.get("semaforo"),
+            "simulacion": {k: (dia.get("simulacion") or {}).get(k) for k in ("apostado", "esperado", "pGanar")},
+            "estadisticas": est}
+
+
 def _contexto(dia: dict, registro: list, fecha: str, pol: STK.PoliticaStake) -> str:
-    limpio = {k: v for k, v in dia.items() if not k.startswith("_") and k not in ("validacion",)}
+    reg = [{k: a.get(k) for k in ("fecha", "accion", "ref", "sel", "cuota", "valor", "estado")}
+           for a in registro[-15:]]
     return (f"\n\nAHORA (Bogotá): {fecha}\nPOLÍTICA: banca {pol.banca:.0f}, unidad {pol.unidad:.0f}, "
             f"tope diario {pol.tope_diario:.0f}, freno {'sí' if pol.freno else 'no'}"
-            f"\n\nDÍA (dia.json):\n{json.dumps(limpio, ensure_ascii=False)[:40000]}"
-            f"\n\nREGISTRO DEL USUARIO (7 días):\n{json.dumps(registro, ensure_ascii=False)[:8000]}")
+            f"\n\nDÍA:\n{json.dumps(_compacto_dia(dia), ensure_ascii=False, separators=(',', ':'))[:12000]}"
+            f"\n\nREGISTRO DEL USUARIO:\n{json.dumps(reg, ensure_ascii=False, separators=(',', ':'))}")
 
 
 def _media_type(img: bytes) -> str:
@@ -173,7 +222,9 @@ def _http(url, cuerpo, cabeceras, timeout=60):
     if r.status_code in (401, 403):
         raise SinCuota(f"clave rechazada ({r.status_code})")
     if r.status_code == 429:
-        raise SinCuota("cuota agotada (429)")
+        raise SinCuota(f"cuota agotada (429): {r.text[:160]}")
+    if r.status_code == 503:
+        raise SinCuota("modelo saturado (503)")
     if r.status_code >= 400:
         raise SinCuota(f"HTTP {r.status_code}: {r.text[:200]}")
     return r.json()
@@ -191,7 +242,7 @@ def modelo_gemini() -> str:
         return config.GEMINI_MODELO
     if _modelo_gemini["id"]:
         return _modelo_gemini["id"]
-    preferidos = ["gemini-flash-latest", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-flash-lite-latest"]
+    preferidos = ["gemini-flash-latest", "gemini-3-flash-preview", "gemini-flash-lite-latest", "gemini-3.1-flash-lite"]
     try:
         r = requests.get(f"{GEMINI}/models", headers={"x-goog-api-key": config.GEMINI_API_KEY},
                          params={"pageSize": 200}, timeout=20)
@@ -220,7 +271,21 @@ def _gemini(historial, texto, imagen, sistema, dia, pol, propuestas):
     herramientas = [{"functionDeclarations": [
         {"name": h["name"], "description": h["description"], "parameters": _esquema_gemini(h["input_schema"])}
         for h in HERRAMIENTAS]}]
-    url = f"{GEMINI}/models/{modelo_gemini()}:generateContent"
+    principal = modelo_gemini()
+    candidatos = [principal] + [m for m in config.GEMINI_RESPALDOS if m != principal]
+    ultimo = None
+    for modelo in candidatos:
+        try:
+            return _gemini_modelo(modelo, list(contenidos), herramientas, sistema, dia, pol, propuestas)
+        except SinCuota as ex:                      # 503 saturado / 429 cuota de ese modelo
+            log.warning("Gemini %s: %s", modelo, ex)
+            ultimo = ex
+            propuestas.clear()
+    raise ultimo or SinCuota("Gemini sin modelos")
+
+
+def _gemini_modelo(modelo, contenidos, herramientas, sistema, dia, pol, propuestas):
+    url = f"{GEMINI}/models/{modelo}:generateContent"
     for _ in range(5):
         d = _http(url, {"systemInstruction": {"parts": [{"text": sistema}]}, "contents": contenidos,
                         "tools": herramientas, "generationConfig": {"temperature": 0.3, "maxOutputTokens": 1500}},
@@ -278,9 +343,17 @@ def _compatible(base, clave, modelo, historial, texto, imagen, sistema, dia, pol
 
 
 def _groq(historial, texto, imagen, sistema, dia, pol, propuestas):
-    modelo = config.GROQ_MODELO_VISION if imagen else config.GROQ_MODELO
-    return _compatible("https://api.groq.com/openai/v1", config.GROQ_API_KEY, modelo,
-                       historial, texto, imagen, sistema, dia, pol, propuestas)
+    modelos = [config.GROQ_MODELO_VISION] if imagen else [config.GROQ_MODELO] + config.GROQ_RESPALDOS
+    ultimo = None
+    for modelo in dict.fromkeys(m for m in modelos if m):
+        try:
+            return _compatible("https://api.groq.com/openai/v1", config.GROQ_API_KEY, modelo,
+                               historial, texto, imagen, sistema, dia, pol, propuestas)
+        except SinCuota as ex:
+            log.warning("Groq %s: %s", modelo, ex)
+            ultimo = ex
+            propuestas.clear()
+    raise ultimo or SinCuota("Groq sin modelos")
 
 
 def _openrouter(historial, texto, imagen, sistema, dia, pol, propuestas):

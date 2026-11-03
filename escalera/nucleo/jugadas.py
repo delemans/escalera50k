@@ -22,13 +22,15 @@ class Reglas:
     escalera_p: float = 0.65
     escalera_cuota: tuple = (1.30, 1.50)
     escalera_gap_h: float = 2.0
-    progresion_cuota: tuple = (1.25, 1.50)
-    combi_p: float = 0.62
-    combi_cuota: tuple = (1.25, 1.75)
-    combi_total: tuple = (2.0, 3.5)
-    super_p: float = 0.58
-    super_total: tuple = (6.0, 20.0)
-    super_piernas: tuple = (4, 6)
+    progresion_cuota: tuple = (1.25, 1.60)
+    combi_p: float = 0.55
+    combi_cuota: tuple = (1.25, 2.20)
+    combi_total: tuple = (2.0, 4.5)
+    combi_ev_pierna: float = 0.0       # combinada de VALOR: cada pierna con EV ≥ 0
+    combi_ev_total: float = 0.02
+    super_cuota_min: float = 100.0     # soñadora: cuota total mínima
+    super_piernas: tuple = (5, 20)
+    super_ev_pierna: float = -0.015    # picks más probables, casi justos o con valor
     max_busqueda: int = 14            # candidatos máx. para combinatoria
     stakes: dict = field(default_factory=lambda: {
         "sencilla": 3000, "escalera": 5000, "progresion": 5000, "combinada": 3000, "super": 1500})
@@ -41,7 +43,8 @@ def _min(t: str) -> int:
 
 def _pata(c: dict) -> dict:
     return {"id": c["id"], "sel": c["sel"], "partido": f"{c['h']} vs {c['a']}",
-            "t": c["t"], "lg": c["lg"], "o": c["o"]}
+            "t": c["t"], "lg": c["lg"], "o": c["o"], "mercado": c.get("mercado", "1X2"),
+            "lado": c.get("lado"), "linea": c.get("linea")}
 
 
 def _distintos(cs) -> bool:
@@ -56,6 +59,8 @@ def elegir_sencillas(cands: list[dict], r: Reglas) -> list[dict]:
     for estricto in (True, False):
         for c in pool:
             if len(elegidas) >= r.sencillas_max or c in elegidas:
+                continue
+            if any((x["h"], x["a"]) == (c["h"], c["a"]) for x in elegidas):
                 continue
             if por_liga.get(c["lg"], 0) >= r.max_por_liga:
                 continue
@@ -139,17 +144,39 @@ def _mejor_multi(pool, tamanos, total, stake, tipo):
 
 
 def combinada(cands, r: Reglas):
-    pool = [c for c in cands if not c.get("alerta") and c["p"] >= r.combi_p
+    """Combinada de VALOR: 2–3 piernas, cada una con EV ≥ 0, y EV total ≥ +2 %."""
+    pool = [c for c in cands if not c.get("alerta") and c["p"] >= r.combi_p and c["ev"] >= r.combi_ev_pierna
             and r.combi_cuota[0] <= c["o"] <= r.combi_cuota[1]]
-    pool = sorted(pool, key=lambda c: -c["p"] * c["o"])[: r.max_busqueda]
-    return _mejor_multi(pool, (2, 3), r.combi_total, r.stakes["combinada"], "combinada")
+    pool = sorted(pool, key=lambda c: -(1 + c["ev"]))[: r.max_busqueda]
+    j = _mejor_multi(pool, (2, 3), r.combi_total, r.stakes["combinada"], "combinada")
+    if j and j["ev"] < r.combi_ev_total:
+        return None
+    return j
 
 
 def super_(cands, r: Reglas):
-    pool = [c for c in cands if not c.get("alerta") and c["p"] >= r.super_p]
-    pool = sorted(pool, key=lambda c: -c["p"] * c["o"])[: min(r.max_busqueda, 12)]
-    return _mejor_multi(pool, range(r.super_piernas[0], r.super_piernas[1] + 1),
-                        r.super_total, r.stakes["super"], "super")
+    """Soñadora para crecer el bank: los picks MÁS PROBABLES del día (una pierna por partido)
+    hasta cuota total ≥ 100. Solo piernas casi justas o con valor (EV ≥ −1,5 %)."""
+    pool = [c for c in cands if not c.get("alerta") and c["ev"] >= r.super_ev_pierna]
+    pool.sort(key=lambda c: (-c["p"], -c["ev"]))
+    elegidas, vistos, cuota = [], set(), 1.0
+    for c in pool:
+        if (c["h"], c["a"]) in vistos:
+            continue
+        elegidas.append(c)
+        vistos.add((c["h"], c["a"]))
+        cuota *= c["o"]
+        if cuota >= r.super_cuota_min and len(elegidas) >= r.super_piernas[0]:
+            break
+        if len(elegidas) >= r.super_piernas[1]:
+            break
+    if cuota < r.super_cuota_min or len(elegidas) < r.super_piernas[0]:
+        return None
+    elegidas.sort(key=lambda c: c["t"])
+    P = math.prod(c["p"] for c in elegidas)
+    return {"tipo": "super", "stake": r.stakes["super"], "patas": [_pata(c) for c in elegidas],
+            "cuota": round(cuota, 2), "P": round(P, 6), "ev": round(P * cuota - 1, 4),
+            "omin": round(V.cuota_minima(P), 1), "probs": [round(c["p"], 4) for c in elegidas]}
 
 
 def armar(cands: list[dict], fecha: str, cfg_prog: dict, r: Reglas | None = None) -> tuple[dict, list[str]]:

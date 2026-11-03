@@ -90,8 +90,8 @@ def test_armar_jugadas():
     assert len(jug["sencillas"]["ids"]) == 5
     assert jug["escalera"] and [p["t"] for p in jug["escalera"]["patas"]] == ["08:00", "10:30", "13:00"]
     assert jug["progresion"]["patas"][0]["sel"] == "Gana A"
-    assert 2.0 <= jug["combinada"]["cuota"] <= 3.5
-    assert jug["super"] is None or 6 <= jug["super"]["cuota"] <= 20
+    assert jug["combinada"] is None or (2.0 <= jug["combinada"]["cuota"] <= 4.5 and jug["combinada"]["ev"] >= 0.02)
+    assert jug["super"] is None or jug["super"]["cuota"] >= 100
     assert not avisos
 
 
@@ -166,7 +166,10 @@ def test_csv_y_candidatos():
     filas, errores = VAL.leer_csv(CSV)
     assert len(filas) == 3 and errores
     cands = A.candidatos_statarea(filas)
-    assert [c["h"] for c in cands] == ["Barcelona"]          # Challenge Cup excluida, QPR < 50
+    assert {c["h"] for c in cands} == {"Barcelona", "QPR"}    # Challenge Cup excluida
+    assert any(c["mercado"] == "1X2" and c["h"] == "Barcelona" for c in cands)
+    assert not any(c["h"] == "QPR" and c["mercado"] == "1X2" for c in cands)       # QPR < 50 %
+    assert all(c.get("sa") is not None for c in cands)
     assert VAL.validar(filas)[0]["c"] == "good"
 
 

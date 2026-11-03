@@ -48,6 +48,9 @@ GEMINI_MODELO = os.environ.get("GEMINI_MODEL", "")           # vacío = se elige
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 GROQ_MODELO = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
 GROQ_MODELO_VISION = os.environ.get("GROQ_VISION_MODEL", "")
+GROQ_RESPALDOS = [m for m in os.environ.get("GROQ_FALLBACKS", "openai/gpt-oss-20b,qwen/qwen3.8-27b").split(",") if m]
+GEMINI_RESPALDOS = [m for m in os.environ.get(
+    "GEMINI_FALLBACKS", "gemini-3-flash-preview,gemini-flash-lite-latest,gemini-3.1-flash-lite").split(",") if m]
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 OPENROUTER_MODELO = os.environ.get("OPENROUTER_MODEL", "google/gemma-4-31b-it:free")
 OPENROUTER_VISION = os.environ.get("OPENROUTER_VISION", "0") == "1"

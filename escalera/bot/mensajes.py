@@ -15,7 +15,7 @@ from __future__ import annotations
 from ..nucleo.formato import barra, cuota, e, fecha_corta, pct, pesos
 
 LINEA = "━━━━━━━━━━━━━━━━"
-ICONO_TIPO = {"sencilla": "🎯", "escalera": "🪜", "progresion": "📈", "combinada": "🔗", "super": "🚀"}
+ICONO_TIPO = {"sencilla": "🎯", "escalera": "🪜", "progresion": "📈", "combinada": "🔗", "super": "🌙"}
 ICONO_ACCION = {"APOSTAR": "🟢", "VIGILAR": "🟡", "NO": "⚪"}
 TEXTO_ACCION = {"APOSTAR": "APOSTAR", "VIGILAR": "VIGILAR", "NO": "NO APOSTAR"}
 ICONO_NIVEL = {"rojo": "🔴", "naranja": "🟠", "amarillo": "🟡", "verde": "🟢", "info": "ℹ️"}
@@ -47,16 +47,23 @@ def resumen(dia: dict, banca_real: float | None = None) -> str:
     v = dia.get("veredicto", {})
     b = dia.get("bancas", {})
     pol = dia.get("politica", {})
-    out = [_titulo("🪜", "ESCALERA 50K", fecha_corta(dia["fecha"])),
-           f"<i>Actualizado {e(dia.get('actualizado', ''))}</i>", LINEA]
+    out = ["🪜 <b>ESCALERA 50K · DC TECNOLOGY</b>",
+           f"📅 {e(fecha_corta(dia['fecha']))} · <i>{e(dia.get('actualizado', ''))}</i>", LINEA]
     out += _alertas(dia, ("rojo",))
     out += [f"<b>{e(v.get('titulo', ''))}</b>", e(v.get("texto", "")), ""]
     plan = dia.get("plan", [])
     n = {k: sum(1 for i in plan if i["accion"] == k) for k in ("APOSTAR", "VIGILAR", "NO")}
     total = sum(i["monto"] for i in plan if i["accion"] == "APOSTAR" and i["tipo"] != "progresion")
-    out += [f"📊 {dia.get('partidos', 0)} partidos analizados",
-            f"🟢 {n['APOSTAR']} apostar · 🟡 {n['VIGILAR']} vigilar · ⚪ {n['NO']} no",
-            f"💵 Plan real de hoy: <b>{pesos(total)}</b> (tope {pesos(pol.get('tope'))})", ""]
+    picks = [p for p in dia.get("picks", []) if p.get("id")]
+    descartados = [p for p in dia.get("picks", []) if not p.get("id")]
+    por_tipo = {t: sum(1 for i in plan if i["tipo"] == t) for t in ("sencilla", "escalera", "combinada", "super")}
+    out += ["📊 <b>Resumen del análisis</b>",
+            f"• {dia.get('partidos', 0)} partidos revisados · {len(picks) + len(descartados)} con cuotas",
+            f"• {len(picks)} picks pasan los filtros · {len(descartados)} descartados",
+            f"• 🎯 {por_tipo['sencilla']} individuales · 🪜 {por_tipo['escalera']} escalera · "
+            f"🔗 {por_tipo['combinada']} combinada · 🌙 {por_tipo['super']} soñadora",
+            f"• 🟢 {n['APOSTAR']} apostar · 🟡 {n['VIGILAR']} vigilar · ⚪ {n['NO']} no",
+            f"💵 Dinero real del plan: <b>{pesos(total)}</b> (tope {pesos(pol.get('tope'))})", ""]
     if b:
         real = banca_real if banca_real is not None else b.get("real")
         out += ["💰 <b>Bancas</b>",
@@ -68,13 +75,30 @@ def resumen(dia: dict, banca_real: float | None = None) -> str:
         out.append("🧾 <b>Liquidado</b>")
         out += [_linea_liquidado(x) for x in liq]
         out.append("")
+    rg = dia.get("riesgo") or {}
+    if rg:
+        icono = {"normal": "🟢", "reducido": "🟠", "stop": "🛑"}.get(rg.get("estado"), "⚪")
+        out += [f"🛡 <b>Riesgo</b> {icono} {e(rg.get('estado', '').upper())} · hoy {pesos(rg.get('netoHoy'), True)} · "
+                f"7 días {pesos(rg.get('neto7d'), True)}"
+                + (f" · {rg['racha']} pérdidas seguidas" if rg.get("racha") else ""), ""]
+    pt = ((dia.get("estadisticas") or {}).get("sistema") or {}).get("porTipo") or {}
+    if pt:
+        out.append("🧪 <b>Prueba de sistemas</b> (simulado)")
+        for t in ("sencilla", "combinada", "super", "progresion", "escalera"):
+            d = pt.get(t)
+            if d:
+                out.append(f"• {NOMBRE_TIPO.get(t, t)}: {d['aciertos']}/{d['n']} · ROI {pct(d['roi'], True, 1)}")
+        out.append("")
     s = dia.get("semaforo")
     if s:
         out += [f"🚦 <b>¿Se está dando?</b> {SEMAFORO.get(s.get('c'), '⚪')}", e(s.get("t")), ""]
     otras = _alertas(dia, ("naranja", "amarillo", "verde"))
     if otras:
         out += otras + [""]
-    out += [LINEA, "Abajo va una tarjeta por jugada con botones.",
+    mias = [m for m in dia.get("misApuestas") or [] if m.get("resultado") == "pendiente"]
+    if mias:
+        out += [f"🧾 Tienes <b>{len(mias)}</b> apuestas abiertas por {pesos(sum(m.get('stakeReal') or 0 for m in mias))} (detalle abajo).", ""]
+    out += [LINEA, "Abajo: el plan, tus apuestas y una tarjeta por jugada con su análisis.",
             "📸 Pantallazo · 🎙 voz · ✍️ «hice 1 y 3» · 💬 pregúntame"]
     if dia.get("sitio"):
         out.append(f"🌐 <a href=\"{e(dia['sitio'])}\">Ver el sitio</a>")
@@ -90,23 +114,66 @@ def _linea_liquidado(x):
 # ---------------------------------------------------------------------------
 # 2. Plan del día (qué hacer con cada una)
 # ---------------------------------------------------------------------------
+GRUPOS = [("sencilla", "🎯 INDIVIDUALES CON VALOR"), ("escalera", "🪜 ESCALERA"), ("combinada", "🔗 COMBINADA"),
+          ("super", "🌙 SOÑADORA (cuota 100+)"), ("progresion", "📈 ESCALERA DE CRECIMIENTO")]
+NOMBRE_TIPO = {"sencilla": "Individual", "escalera": "Escalera", "combinada": "Combinada",
+               "super": "Soñadora", "progresion": "Escalera de crecimiento"}
+
+
+def estrellas(n) -> str:
+    n = max(0, min(5, int(n or 0)))
+    return "●" * n + "○" * (5 - n)
+
+
 def plan(dia: dict) -> str | None:
     items = dia.get("plan") or []
     if not items:
         return None
-    out = [_titulo("📋", "QUÉ HACER HOY", f"{len(items)} jugadas"), LINEA]
-    for i in items:
-        ic = ICONO_ACCION[i["accion"]]
-        linea = f"{ic} <b>{e(i['hora'])}</b> {ICONO_TIPO.get(i['tipo'], '')} {e(i['titulo'])}"
-        if i["accion"] == "APOSTAR":
-            det = f"   → <b>{pesos(i['monto'])}</b> si BetPlay paga ≥ <b>{cuota(i['cuota_min'])}</b>"
-        elif i["accion"] == "VIGILAR":
-            det = f"   → solo si BetPlay paga ≥ <b>{cuota(i['cuota_min'])}</b> (ref {cuota(i['cuota_ref'])})"
-        else:
-            det = "   → no apostar · solo simulación"
-        out += [linea, det]
-    out += ["", LINEA, "🟢 apostar · 🟡 vigilar (dime la cuota de BetPlay) · ⚪ no",
+    out = [_titulo("📋", "PLAN DEL DÍA", fecha_corta(dia["fecha"])), LINEA]
+    for tipo, nombre in GRUPOS:
+        grupo = [i for i in items if i["tipo"] == tipo]
+        if not grupo:
+            continue
+        out.append(f"<b>{nombre}</b>")
+        for i in grupo:
+            ic = ICONO_ACCION[i["accion"]]
+            pk = _pick(dia, i["id"]) or {}
+            conf = f" · {estrellas(pk.get('confianza'))}" if tipo == "sencilla" and pk else ""
+            out.append(f"{ic} <b>{e(i['hora'])}</b> · {e(i['titulo'])}{conf}")
+            if i["accion"] == "APOSTAR":
+                out.append(f"     <b>{pesos(i['monto'])}</b> · mínima BetPlay <b>{cuota(i['cuota_min'])}</b> · EV {pct(i['ev'], True, 1)}")
+            elif i["accion"] == "VIGILAR":
+                out.append(f"     solo si BetPlay paga ≥ <b>{cuota(i['cuota_min'])}</b> (ref {cuota(i['cuota_ref'])})")
+            else:
+                out.append("     no apostar · solo simulación")
+        out.append("")
+    total = sum(i["monto"] for i in items if i["accion"] == "APOSTAR" and i["tipo"] != "progresion")
+    tope = (dia.get("politica") or {}).get("tope")
+    out += [LINEA, f"💵 Dinero real del plan: <b>{pesos(total)}</b>" + (f" de {pesos(tope)} de tope" if tope else ""),
+            "🟢 apostar · 🟡 vigilar · ⚪ no  ·  ●●●○○ confianza en los datos",
             "<i>Confirma siempre la cuota en BetPlay antes de apostar.</i>"]
+    return "\n".join(out)
+
+
+def mis_apuestas(dia: dict) -> str | None:
+    mias = dia.get("misApuestas") or []
+    if not mias:
+        return None
+    abiertas = [m for m in mias if m.get("resultado") == "pendiente"]
+    en_juego = sum(m.get("stakeReal") or 0 for m in abiertas)
+    pot = sum((m.get("stakeReal") or 0) * (m.get("cuotaReal") or 1) for m in abiertas)
+    out = [_titulo("🧾", "TUS APUESTAS", f"{len(abiertas)} abiertas"), LINEA]
+    for m in mias:
+        ic = ICONO_RES.get(m.get("resultado"), "•")
+        linea = f"{ic} {e(m.get('hora') or '')} · {e(m.get('partido'))}"
+        det = f"     ▸ {e(m.get('seleccion'))} @ {cuota(m.get('cuotaReal'))} · {pesos(m.get('stakeReal'))}"
+        if m.get("resultado") != "pendiente" and m.get("netoReal") is not None:
+            det += f" → <b>{pesos(m['netoReal'], True)}</b>"
+        out += [linea, det]
+    out += ["", f"En juego <b>{pesos(en_juego)}</b> · pago potencial {pesos(pot)}"]
+    grande = [m for m in abiertas if (m.get("stakeReal") or 0) > 2 * ((dia.get("politica") or {}).get("unidad") or 2000)]
+    for m in grande:
+        out.append(f"⚠️ {e(m.get('partido'))}: {pesos(m['stakeReal'])} es más de 2 unidades.")
     return "\n".join(out)
 
 
@@ -116,25 +183,36 @@ def plan(dia: dict) -> str | None:
 def tarjeta(dia: dict, item: dict) -> str:
     tipo = item["tipo"]
     acc = item["accion"]
-    cab = (f"{ICONO_TIPO.get(tipo, '•')} <b>{e(item['titulo'])}</b>\n"
+    pk = _pick(dia, item["id"]) if tipo == "sencilla" else None
+    etiqueta = ((pk or {}).get("justificacion") or {}).get("etiqueta")
+    cab = [f"{ICONO_TIPO.get(tipo, '•')} <b>{NOMBRE_TIPO.get(tipo, '').upper()}</b> · {e(item['titulo'])}"
+           + (f" · <i>{e(etiqueta)}</i>" if etiqueta and tipo == "sencilla" else ""),
            f"{ICONO_ACCION[acc]} <b>{TEXTO_ACCION[acc]}</b>"
-           + (f" · <b>{pesos(item['monto'])}</b>" if item["monto"] else ""))
+           + (f" · <b>{pesos(item['monto'])}</b>" if item["monto"] else "")
+           + (f" si BetPlay paga ≥ <b>{cuota(item['cuota_min'])}</b>" if acc != "NO" else "")]
     cuerpo = {"sencilla": _cuerpo_sencilla, "escalera": _cuerpo_escalera, "progresion": _cuerpo_progresion,
               "combinada": _cuerpo_multi, "super": _cuerpo_multi}[tipo](dia, item)
-    pie = [LINEA, f"Mínima BetPlay <b>{cuota(item['cuota_min'])}</b> · EV {pct(item['ev'], True, 1)}",
+    prob = f"Prob. {pct(item['p'], dec=1)}"
+    if pk and pk.get("p_push"):
+        prob = f"Gana {pct(item['p'], dec=1)} · empate (devuelve) {pct(pk['p_push'], dec=1)}"
+    pie = [LINEA, f"{prob} · EV {pct(item['ev'], True, 1)} · mínima {cuota(item['cuota_min'])}",
            f"<i>{e(item['razon'])}</i>"]
-    return "\n".join([cab, LINEA] + cuerpo + pie)
+    return "\n".join(cab + [LINEA] + cuerpo + pie)
 
 
 def _cuerpo_sencilla(dia, item):
     p = _pick(dia, item["id"]) or {}
-    out = [f"⏱ {e(p.get('t'))} · {e(p.get('lg'))}", f"{e(p.get('h'))} vs {e(p.get('a'))}",
-           f"▸ <b>{e(p.get('sel'))}</b>",
-           f"Prob. {pct(p.get('p'))} · Ref {cuota(p.get('o'))} ({e(p.get('bk'))})"]
-    if p.get("nCasas"):
-        out.append(f"<i>{p['nCasas']} casas · StatArea {pct(p.get('sa'))} · mercado {pct(p.get('mk'))}</i>")
-    if p.get("noticias"):
-        out.append(f"📰 <i>{e(p['noticias'])}</i>")
+    j = p.get("justificacion") or {}
+    out = [f"⚽ <b>{e(p.get('h'))} vs {e(p.get('a'))}</b>",
+           f"🏆 {e(p.get('lg'))} · ⏱ {e(p.get('t'))}",
+           f"▸ <b>{e(p.get('sel'))}</b> · ref {cuota(p.get('o'))} ({e(p.get('bk'))})",
+           f"Confianza en los datos {estrellas(p.get('confianza'))}", ""]
+    if j.get("aFavor"):
+        out.append("📌 <b>Por qué</b>")
+        out += [f"• {e(x)}" for x in j["aFavor"][:4]]
+    if j.get("enContra"):
+        out.append("⚖️ <b>En contra</b>")
+        out += [f"• {e(x)}" for x in j["enContra"][:3]]
     return out
 
 
@@ -152,17 +230,31 @@ def _cuerpo_escalera(dia, item):
         out.append("<i>Montos de la simulación del sistema (no es dinero real hoy).</i>")
     out += ["", f"🏁 Si completa: <b>{pesos(j['final'] * factor)}</b> · prob. {pct(j['P'], dec=1)}",
             "Falla 1.º o 2.º: pierdes la base · falla 3.º: quedas en $0"]
+    out += _por_que(dia, "escalera")
     return out
+
+
+def _por_que(dia, tipo):
+    razones = (dia.get("porQue") or {}).get(tipo) or []
+    return (["", "📌 <b>Por qué</b>"] + [f"• {e(r)}" for r in razones]) if razones else []
 
 
 def _cuerpo_progresion(dia, item):
     j = dia["jugadas"]["progresion"]
     x = j["patas"][0]
-    return [f"Reto #{j['reto']} · Paso {j['paso']}",
-            f"{barra(j['saldo'], j['meta'])} <b>{pesos(j['saldo'])}</b> / {pesos(j['meta'])}",
-            f"{e(x['t'])} · {e(x['partido'])}", f"▸ <b>{e(x['sel'])}</b> @ {cuota(x['o'])}",
-            f"Todo el saldo → si gana {pesos(j['saldo'] * x['o'])}",
-            f"🎲 Este paso {pct(j['P'])} · 🏁 llegar a la meta {pct(j['Pmeta'], dec=1)}"]
+    ec = dia.get("escaleraCrec") or {}
+    stake = ec.get("stake") or j["saldo"]
+    lineas = [f"Serie #{j['reto']} · Peldaño {j['paso']}",
+              f"{barra(j['saldo'], j['meta'])} <b>{pesos(j['saldo'])}</b> / {pesos(j['meta'])}",
+              f"{e(x['t'])} · {e(x['partido'])}", f"▸ <b>{e(x['sel'])}</b> @ {cuota(x['o'])}"]
+    if ec.get("asegurado"):
+        lineas += [f"🛡 Modo seguro: apuestas <b>{pesos(stake)}</b> y apartas {pesos(ec['asegurado'])} (tu base)",
+                   f"   si gana: {pesos(stake * x['o'] + ec['asegurado'])} · si pierde: conservas {pesos(ec['asegurado'])}",
+                   f"   modo agresivo (todo): {pesos(ec['agresivo'])} → {pesos(ec['agresivo'] * x['o'])}"]
+    else:
+        lineas.append(f"Apuestas <b>{pesos(stake)}</b> → si gana {pesos(stake * x['o'])}")
+    return lineas + [
+            f"🎲 Este paso {pct(j['P'])} · 🏁 llegar a la meta {pct(j['Pmeta'], dec=1)}"] + _por_que(dia, "progresion")
 
 
 def _cuerpo_multi(dia, item):
@@ -173,8 +265,9 @@ def _cuerpo_multi(dia, item):
     out += ["", f"Cuota total <b>{cuota(j['cuota'])}</b> · prob. {pct(j['P'], dec=1)}",
             f"Con {pesos(monto)} cobras {pesos(monto * j['cuota'])}"]
     if item["tipo"] == "super":
-        out.append("⚠️ <i>Gasto pequeño de alto riesgo: lo normal es perderla.</i>")
-    return out
+        out.append(f"🎟 {len(j['patas'])} piernas, todas con valor. Prob. de acertar ≈ 1 en {max(1, round(1 / j['P'])) if j.get('P') else '—'}.")
+        out.append("⚠️ <i>Boleto de lotería con valor: se juega la apuesta mínima y lo normal es perderla.</i>")
+    return out + _por_que(dia, item["tipo"])
 
 
 def botones_tarjeta(ref: str, estado: str = "pendiente"):
