@@ -90,9 +90,10 @@ def test_armar_jugadas():
     assert len(jug["sencillas"]["ids"]) == 5
     assert jug["escalera"] and [p["t"] for p in jug["escalera"]["patas"]] == ["08:00", "10:30", "13:00"]
     assert jug["progresion"]["patas"][0]["sel"] == "Gana A"
-    assert jug["combinada"] is None or (2.0 <= jug["combinada"]["cuota"] <= 4.5 and jug["combinada"]["ev"] >= 0.02)
+    c = jug["combinada"]
+    assert c is None or not c["valor"] or (2.0 <= c["cuota"] <= 4.5 and c["ev"] >= 0.02)
     assert jug["super"] is None or jug["super"]["cuota"] >= 100
-    assert not avisos
+    assert all(a.startswith("Hoy no hay") for a in avisos)
 
 
 # --- liquidación ------------------------------------------------------------

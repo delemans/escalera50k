@@ -92,12 +92,15 @@ def por_que_jugada(tipo: str, j: dict) -> list[str]:
     P = j.get("P", 0)
     if tipo == "escalera":
         return ["Tres favoritos con p ≥ 65 % y al menos 2 h entre partidos, para reinvertir con calma.",
-                f"Completa {_pct(P)} de las veces; si falla el 3.º no pierdes (ya retiraste la base)."]
+                f"Cada peldaño que gana pasa TODO al siguiente; completa {_pct(P)} de las veces."]
     if tipo == "combinada":
-        return [f"Combinada de valor: cada pierna tiene EV ≥ 0 y el boleto suma EV {_pct(j.get('ev') or 0)}.",
+        intro = (f"Combinada de valor: cada pierna tiene EV ≥ 0 y el boleto suma EV {_pct(j.get('ev') or 0)}."
+                 if j.get("valor", True) else
+                 f"Hoy no hay combinada con valor claro: esta es la mejor posible (EV {_pct(j.get('ev') or 0)}); solo con la mínima.")
+        return [intro,
                 f"Paga {_c(j.get('cuota') or 0)} y gana {_pct(P)} de las veces."]
     if tipo == "super":
-        return [f"Soñadora: {len(j.get('patas', []))} piernas, todas con valor, para una cuota de {_c(j.get('cuota') or 0)}.",
+        return [f"Soñadora: {len(j.get('patas', []))} piernas, las más probables del día, para una cuota de {_c(j.get('cuota') or 0)}.",
                 f"Prob. {_pct(P, 2)}: se acierta muy pocas veces; por eso va siempre con la apuesta mínima.",
                 f"EV del boleto {_pct(j.get('ev') or 0)} (ojo: con tantas piernas un error pequeño en cada una cambia mucho)."]
     if tipo == "progresion":

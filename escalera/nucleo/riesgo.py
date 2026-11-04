@@ -67,8 +67,9 @@ def evaluar(filas: list[dict], banca: float, hoy: str, banca_inicial: float | No
             "racha": racha, "alertas": alertas}
 
 
-def escalera_crecimiento(cfg: dict, modo: str = "seguro") -> dict:
-    """Cuánto va en el próximo peldaño. Seguro: desde el peldaño 2 se aparta la base."""
+def escalera_crecimiento(cfg: dict, modo: str = "todo") -> dict:
+    """Cuánto va en el próximo peldaño. Por defecto TODO lo ganado pasa al siguiente peldaño
+    (modo «seguro» = apartar la base desde el peldaño 2)."""
     saldo, base, paso = cfg.get("saldo", 0), cfg.get("base", 0), cfg.get("paso", 1)
     if modo == "seguro" and paso >= 2 and saldo > base:
         stake, asegurado = saldo - base, base
@@ -85,4 +86,29 @@ def escalera_crecimiento(cfg: dict, modo: str = "seguro") -> dict:
             break
     if perdidas >= 2:
         avisos.append("2 series perdidas seguidas: la próxima base debería bajar a la mitad.")
-    return {"stake": round(stake), "asegurado": round(asegurado), "agresivo": round(saldo), "avisos": avisos}
+    return {"stake": round(stake), "asegurado": round(asegurado), "agresivo": round(saldo), "avisos": avisos,
+            "peldanos": MAX_PELDANOS}
+
+
+def plan_peldanos(cfg: dict, cuota_hoy: float | None, cuota_tipica: float = 1.40) -> list[dict]:
+    """Tabla de la serie: en cada peldaño se apuesta TODO lo acumulado. Hoy con la cuota real del pick,
+    los siguientes con una cuota típica (1,40) solo como referencia."""
+    saldo, paso, meta = cfg.get("saldo", 0), cfg.get("paso", 1), cfg.get("meta", 50000)
+    filas, monto = [], cfg.get("base", saldo)
+    for n in range(1, MAX_PELDANOS + 1):
+        if n < paso:
+            estado = "ganado"
+        elif n == paso:
+            estado, monto = "hoy", saldo
+        else:
+            estado = "siguiente"
+        o = cuota_hoy if (n == paso and cuota_hoy) else cuota_tipica
+        if n < paso:                                         # reconstruye lo ganado hacia atrás (aprox.)
+            filas.append({"n": n, "estado": estado})
+            continue
+        cobro = monto * o
+        filas.append({"n": n, "estado": estado, "apuesta": round(monto), "cuota": o, "cobro": round(cobro)})
+        monto = cobro
+        if cobro >= meta:
+            break
+    return filas

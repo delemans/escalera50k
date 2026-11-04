@@ -223,11 +223,17 @@ def construir_dia(entrada: dict) -> dict:
     # Gestión de riesgo (stop-loss, enfriamiento, modo reducido) sobre tus apuestas reales
     rg = RIESGO.evaluar(filas_previas, pol.banca, fecha, ini_real)
     ec = RIESGO.escalera_crecimiento(prog_cfg) if prog_cfg.get("activo") else None
+    if ec:
+        pj = jug.get("progresion")
+        ec["tabla"] = RIESGO.plan_peldanos(prog_cfg, pj["patas"][0]["o"] if pj else None)
     for i in plan:
         if i.tipo == "progresion" and ec and i.monto:
             i.monto = ec["stake"]
             if ec["asegurado"]:
                 i.razon = f"Modo seguro: apartas la base ({pesos(ec['asegurado'])}) y reinviertes solo lo ganado."
+            else:
+                i.razon = (f"Peldaño {prog_cfg.get('paso', 1)} de {ec['peldanos']}: va TODO lo acumulado. "
+                           "Si gana, todo pasa al siguiente; si pierde, la serie reinicia con la base.")
         if rg["factor"] < 1 and i.monto:
             if rg["factor"] == 0:
                 i.monto, i.accion, i.razon = 0, "NO", "STOP del día por pérdidas: hoy no se apuesta más."

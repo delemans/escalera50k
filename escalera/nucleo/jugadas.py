@@ -54,6 +54,8 @@ def _distintos(cs) -> bool:
 
 def elegir_sencillas(cands: list[dict], r: Reglas) -> list[dict]:
     pool = [c for c in cands if not c.get("alerta") and r.sencilla_cuota[0] <= c["o"] <= r.sencilla_cuota[1]]
+    if len(pool) < 3:                                   # día flojo: se abre el rango para no quedar sin individuales
+        pool = [c for c in cands if not c.get("alerta") and 1.20 <= c["o"] <= 3.50]
     pool.sort(key=lambda c: (not c.get("valor"), -c["ev"], -c["p"]))
     elegidas, por_liga, por_hora = [], {}, {}
     for estricto in (True, False):
@@ -95,11 +97,11 @@ def escalera(cands: list[dict], r: Reglas) -> tuple[dict | None, str | None]:
     S = r.stakes["escalera"]
     o = [c["o"] for c in mejor]
     p = [c["p"] for c in mejor]
-    s2 = S * o[0]
-    s3 = s2 * o[1] - S
-    final = s3 * o[2] + S
+    s2 = S * o[0]                    # peldaño 1 gana → TODO lo cobrado va al peldaño 2
+    s3 = s2 * o[1]                   # peldaño 2 gana → TODO va al peldaño 3
+    final = s3 * o[2]
     P = math.prod(p)
-    ev = (-S * (1 - p[0] * p[1]) + P * (final - S)) / S
+    ev = P * final / S - 1
     return {"tipo": "escalera", "stake": S, "patas": [_pata(c) for c in mejor],
             "P": round(P, 4), "ev": round(ev, 4), "final": round(final),
             "montos": [S, round(s2), round(s3)]}, aviso
@@ -144,20 +146,38 @@ def _mejor_multi(pool, tamanos, total, stake, tipo):
 
 
 def combinada(cands, r: Reglas):
-    """Combinada de VALOR: 2–3 piernas, cada una con EV ≥ 0, y EV total ≥ +2 %."""
-    pool = [c for c in cands if not c.get("alerta") and c["p"] >= r.combi_p and c["ev"] >= r.combi_ev_pierna
-            and r.combi_cuota[0] <= c["o"] <= r.combi_cuota[1]]
-    pool = sorted(pool, key=lambda c: -(1 + c["ev"]))[: r.max_busqueda]
-    j = _mejor_multi(pool, (2, 3), r.combi_total, r.stakes["combinada"], "combinada")
-    if j and j["ev"] < r.combi_ev_total:
-        return None
-    return j
+    """Combinada de VALOR: 2–3 piernas, cada una con EV ≥ 0, y EV total ≥ +2 %.
+    Si hoy no existe, sale la MEJOR combinada posible marcada «sin valor» (para vigilar / probar el sistema)."""
+    def _buscar(ev_pierna, p_min, cuota_rng, total):
+        pool = [c for c in cands if not c.get("alerta") and c["p"] >= p_min and c["ev"] >= ev_pierna
+                and cuota_rng[0] <= c["o"] <= cuota_rng[1]]
+        pool = sorted(pool, key=lambda c: -(1 + c["ev"]) * c["p"])[: r.max_busqueda]
+        return _mejor_multi(pool, (2, 3), total, r.stakes["combinada"], "combinada")
+    j = _buscar(r.combi_ev_pierna, r.combi_p, r.combi_cuota, r.combi_total)
+    if j and j["ev"] >= r.combi_ev_total:
+        j["valor"] = True
+        return j
+    for evp, pm, rng, tot in ((-0.02, 0.50, (1.20, 2.40), (1.8, 5.0)), (-0.05, 0.45, (1.15, 2.80), (1.6, 6.0))):
+        j = _buscar(evp, pm, rng, tot)
+        if j:
+            j["valor"] = False
+            return j
+    return None
 
 
 def super_(cands, r: Reglas):
     """Soñadora para crecer el bank: los picks MÁS PROBABLES del día (una pierna por partido)
     hasta cuota total ≥ 100. Solo piernas casi justas o con valor (EV ≥ −1,5 %)."""
-    pool = [c for c in cands if not c.get("alerta") and c["ev"] >= r.super_ev_pierna]
+    for umbral in (r.super_ev_pierna, -0.03, -0.06):   # si no alcanza 100, se abre un poco el filtro
+        j = _sonadora(cands, r, umbral)
+        if j:
+            j["umbralEv"] = umbral
+            return j
+    return None
+
+
+def _sonadora(cands, r: Reglas, umbral: float):
+    pool = [c for c in cands if not c.get("alerta") and c["ev"] >= umbral]
     pool.sort(key=lambda c: (-c["p"], -c["ev"]))
     elegidas, vistos, cuota = [], set(), 1.0
     for c in pool:
@@ -168,7 +188,7 @@ def super_(cands, r: Reglas):
         cuota *= c["o"]
         if cuota >= r.super_cuota_min and len(elegidas) >= r.super_piernas[0]:
             break
-        if len(elegidas) >= r.super_piernas[1]:
+        if len(elegidas) >= r.super_piernas[1] + 5:
             break
     if cuota < r.super_cuota_min or len(elegidas) < r.super_piernas[0]:
         return None
@@ -198,6 +218,11 @@ def armar(cands: list[dict], fecha: str, cfg_prog: dict, r: Reglas | None = None
     jug = {"sencillas": {"stake": r.stakes["sencilla"], "ids": [c["id"] for c in senc]},
            "escalera": esc, "progresion": progresion(cands, r, cfg_prog),
            "combinada": combinada(cands, r), "super": super_(cands, r)}
+    for k, nombre in (("combinada", "combinada"), ("super", "soñadora")):
+        if not jug[k]:
+            avisos.append(f"Hoy no hay {nombre}: no hay suficientes picks que pasen los filtros.")
+    if not senc:
+        avisos.append("Hoy no hay individuales: ningún pick pasa los filtros.")
     sufijos = {"escalera": "esc", "progresion": "prog", "combinada": "combi", "super": "super"}
     for k, suf in sufijos.items():
         if jug[k]:

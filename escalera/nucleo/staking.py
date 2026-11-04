@@ -144,6 +144,14 @@ def plan_del_dia(dia: dict, pol: PoliticaStake) -> list[Instruccion]:
         if not j:
             continue
         acc = _accion(j["ev"], pol)
+        razon = "Multi: todas las piernas deben ganar." if acc != "NO" else "EV negativo: solo simulación."
+        if clave == "super" and j["ev"] >= -0.10:
+            acc = "APOSTAR"                                 # prueba diaria del sistema: siempre la mínima
+            razon = ("Prueba diaria de la soñadora: solo la apuesta mínima. "
+                     + ("Tiene valor." if j["ev"] >= 0 else "EV ligeramente negativo: es un boleto de lotería."))
+        if clave == "combinada" and j.get("valor") is False and acc == "NO":
+            acc = "VIGILAR"
+            razon = "Hoy no hay combinada con valor: esta es la mejor posible; solo si BetPlay paga la mínima."
         if acc != "APOSTAR":
             monto = 0
         elif clave == "super":
@@ -156,16 +164,16 @@ def plan_del_dia(dia: dict, pol: PoliticaStake) -> list[Instruccion]:
                 cref *= x["o"]
         else:
             cref = j["cuota"]
-        out.append(Instruccion(j["id"], clave, nombre, acc, monto, round(cref, 3),
-                               round(V.cuota_minima(j["P"], pol.margen_valor), 3), j["P"], j["ev"],
-                               "Multi: todas las piernas deben ganar." if acc != "NO"
-                               else "EV negativo: solo simulación.",
-                               j["patas"][0].get("t", "")))
+        cmin = V.cuota_minima(j["P"], pol.margen_valor)
+        if clave == "super":
+            cmin = min(cmin, cref * 0.9)                     # soñadora: acepta hasta un 10 % menos que la referencia
+        out.append(Instruccion(j["id"], clave, nombre, acc, monto, round(cref, 3), round(cmin, 3), j["P"], j["ev"],
+                               razon, j["patas"][0].get("t", "")))
 
     pr = jug.get("progresion")
     if pr:
         acc = _accion(pr["ev"], pol)
-        out.append(Instruccion(pr["id"], "progresion", f"Escalera de crecimiento · peldaño {pr['paso']}", acc,
+        out.append(Instruccion(pr["id"], "progresion", f"Escalera de crecimiento · peldaño {pr['paso']} de 5", acc,
                                pr["stake"] if acc == "APOSTAR" else 0, pr["patas"][0]["o"],
                                round(V.cuota_minima(pr["P"], pol.margen_valor), 3), pr["P"], pr["ev"],
                                "Reto aparte con su propio fondo: no cuenta en el tope ni en el plan diario.",

@@ -60,5 +60,10 @@ def test_riesgo_stop_y_escalera():
     r = R.evaluar(filas, 100000, hoy)
     assert r["estado"] == "stop" and r["factor"] == 0
     ec = R.escalera_crecimiento({"saldo": 13860, "base": 9000, "paso": 2})
+    assert ec["stake"] == 13860 and ec["asegurado"] == 0            # todo lo ganado al siguiente peldaño
+    ec = R.escalera_crecimiento({"saldo": 13860, "base": 9000, "paso": 2}, modo="seguro")
     assert ec["stake"] == 4860 and ec["asegurado"] == 9000
+    t = R.plan_peldanos({"saldo": 13860, "base": 9000, "paso": 2, "meta": 50000}, 1.36)
+    assert t[0]["estado"] == "ganado" and t[1]["apuesta"] == 13860 and t[1]["cobro"] == round(13860 * 1.36)
+    assert t[2]["apuesta"] == t[1]["cobro"]
     assert dt  # importado

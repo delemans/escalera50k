@@ -115,7 +115,7 @@ def _linea_liquidado(x):
 # ---------------------------------------------------------------------------
 # 2. Plan del día (qué hacer con cada una)
 # ---------------------------------------------------------------------------
-GRUPOS = [("sencilla", "🎯 INDIVIDUALES CON VALOR"), ("escalera", "🪜 ESCALERA"), ("combinada", "🔗 COMBINADA"),
+GRUPOS = [("sencilla", "🎯 INDIVIDUALES CON VALOR"), ("escalera", "🪜 ESCALERA DEL DÍA (3 partidos, todo al siguiente)"), ("combinada", "🔗 COMBINADA"),
           ("super", "🌙 SOÑADORA (cuota 100+)"), ("progresion", "📈 ESCALERA DE CRECIMIENTO")]
 NOMBRE_TIPO = {"sencilla": "Individual", "escalera": "Escalera", "combinada": "Combinada",
                "super": "Soñadora", "progresion": "Escalera de crecimiento"}
@@ -148,6 +148,11 @@ def plan(dia: dict) -> str | None:
             else:
                 out.append("     no apostar · solo simulación")
         out.append("")
+    faltan = [n for t, n in GRUPOS if t in ("sencilla", "combinada", "super") and not any(i["tipo"] == t for i in items)]
+    for n in faltan:
+        motivo = {"🌙 SOÑADORA (cuota 100+)": "no hay suficientes partidos probables para llegar a cuota 100"}.get(
+            n, "ningún pick pasa los filtros")
+        out.append(f"<b>{n}</b>\n     hoy no sale: {motivo}\n")
     total = sum(i["monto"] for i in items if i["accion"] == "APOSTAR" and i["tipo"] != "progresion")
     tope = (dia.get("politica") or {}).get("tope")
     out += [LINEA, f"💵 Dinero real del plan: <b>{pesos(total)}</b>" + (f" de {pesos(tope)} de tope" if tope else ""),
@@ -224,13 +229,13 @@ def _cuerpo_escalera(dia, item):
     out = []
     for n, (x, m) in enumerate(zip(j["patas"], montos), 1):
         monto = pesos(m * factor) if m else "—"
-        nota = " (ya retiraste la base)" if n == 3 else ""
+        nota = " (todo lo cobrado)" if n > 1 else ""
         out += [f"<b>{n}.</b> {e(x['t'])} · {e(x['partido'])}",
                 f"    ▸ {e(x['sel'])} @ {cuota(x['o'])} · apuestas <b>{monto}</b>{nota}"]
     if not item["monto"]:
         out.append("<i>Montos de la simulación del sistema (no es dinero real hoy).</i>")
     out += ["", f"🏁 Si completa: <b>{pesos(j['final'] * factor)}</b> · prob. {pct(j['P'], dec=1)}",
-            "Falla 1.º o 2.º: pierdes la base · falla 3.º: quedas en $0"]
+            "Cada peldaño que gana pasa TODO al siguiente · si uno falla, se pierde lo apostado y se reinicia"]
     out += _por_que(dia, "escalera")
     return out
 
@@ -253,9 +258,31 @@ def _cuerpo_progresion(dia, item):
                    f"   si gana: {pesos(stake * x['o'] + ec['asegurado'])} · si pierde: conservas {pesos(ec['asegurado'])}",
                    f"   modo agresivo (todo): {pesos(ec['agresivo'])} → {pesos(ec['agresivo'] * x['o'])}"]
     else:
-        lineas.append(f"Apuestas <b>{pesos(stake)}</b> → si gana {pesos(stake * x['o'])}")
+        lineas.append(f"Apuestas <b>{pesos(stake)}</b> (todo) → si gana <b>{pesos(stake * x['o'])}</b>")
     return lineas + [
-            f"🎲 Este paso {pct(j['P'])} · 🏁 llegar a la meta {pct(j['Pmeta'], dec=1)}"] + _por_que(dia, "progresion")
+            f"🎲 Este paso {pct(j['P'])} · 🏁 llegar a la meta {pct(j['Pmeta'], dec=1)}", ""] + \
+        _tabla_peldanos(dia.get("progresionCfg") or {}, ec) + _por_que(dia, "progresion")
+
+
+def _tabla_peldanos(cfg: dict, ec: dict) -> list[str]:
+    """La serie completa: cuántos peldaños hay, cuánto va en cada uno y cuándo se reinicia."""
+    tabla = (ec or {}).get("tabla") or []
+    total = (ec or {}).get("peldanos") or 5
+    base, meta = cfg.get("base", 0), cfg.get("meta", 50000)
+    out = [f"🪜 <b>La serie: {total} peldaños o meta {pesos(meta)}</b>",
+           f"Base {pesos(base)} · en cada peldaño apuestas <b>TODO</b> lo acumulado"]
+    for f in tabla:
+        if f["estado"] == "ganado":
+            out.append(f"✅ Peldaño {f['n']} · ganado")
+        else:
+            marca = "👉" if f["estado"] == "hoy" else "▫️"
+            out.append(f"{marca} Peldaño {f['n']} · apuestas {pesos(f['apuesta'])} @ {cuota(f['cuota'])} → <b>{pesos(f['cobro'])}</b>"
+                       + (" (hoy)" if f["estado"] == "hoy" else ""))
+    out += ["✅ Gana → todo pasa al siguiente peldaño",
+            f"❌ Pierde → la serie se reinicia en el peldaño 1 con {pesos(base)}",
+            f"🏁 Llegas a la meta o al peldaño {total} → cobras y empieza serie nueva",
+            "<i>Los peldaños futuros usan cuota 1,40 de referencia; la real sale cada mañana.</i>"]
+    return out
 
 
 def _cuerpo_multi(dia, item):
@@ -266,7 +293,7 @@ def _cuerpo_multi(dia, item):
     out += ["", f"Cuota total <b>{cuota(j['cuota'])}</b> · prob. {pct(j['P'], dec=1)}",
             f"Con {pesos(monto)} cobras {pesos(monto * j['cuota'])}"]
     if item["tipo"] == "super":
-        out.append(f"🎟 {len(j['patas'])} piernas, todas con valor. Prob. de acertar ≈ 1 en {max(1, round(1 / j['P'])) if j.get('P') else '—'}.")
+        out.append(f"🎟 {len(j['patas'])} piernas, las más probables del día. Prob. de acertar ≈ 1 en {max(1, round(1 / j['P'])) if j.get('P') else '—'}.")
         out.append("⚠️ <i>Boleto de lotería con valor: se juega la apuesta mínima y lo normal es perderla.</i>")
     return out + _por_que(dia, item["tipo"])
 
@@ -499,16 +526,12 @@ def escalera_estado(dia: dict) -> str:
     if not cfg:
         return "📈 Aún no tengo los datos de tu escalera. Llegan con el análisis de la mañana (/hoy)."
     ec = dia.get("escaleraCrec") or {}
-    saldo, base, paso = cfg.get("saldo", 0), cfg.get("base", 0), cfg.get("paso", 1)
-    seguro = ec.get("stake") or (saldo - base if paso >= 2 and saldo > base else saldo)
+    saldo, paso = cfg.get("saldo", 0), cfg.get("paso", 1)
+    seguro = ec.get("stake") or saldo
     out = [_titulo("📈", "ESCALERA DE CRECIMIENTO", f"serie #{cfg.get('reto', 1)}"), LINEA,
            f"{barra(saldo, cfg.get('meta', 50000))} <b>{pesos(saldo)}</b> / {pesos(cfg.get('meta', 50000))}",
-           f"Próximo: <b>peldaño {paso}</b>", ""]
-    if paso >= 2 and saldo > base:
-        out += [f"🛡 Modo seguro: apuestas <b>{pesos(seguro)}</b> y apartas tu base de {pesos(base)}",
-                f"🔥 Modo agresivo: apuestas los <b>{pesos(saldo)}</b>"]
-    else:
-        out.append(f"Apuestas <b>{pesos(saldo)}</b> (la base de la serie)")
+           f"Próximo: <b>peldaño {paso} de {ec.get('peldanos') or 5}</b> · apuestas <b>{pesos(seguro)}</b> (todo lo acumulado)", ""]
+    out += _tabla_peldanos(cfg, ec)
     j = (dia.get("jugadas") or {}).get("progresion")
     plan = next((i for i in dia.get("plan") or [] if i["tipo"] == "progresion"), None)
     if j and plan and dia.get("fecha"):
@@ -521,7 +544,7 @@ def escalera_estado(dia: dict) -> str:
     else:
         out += ["", "🎯 El pick de este peldaño sale con el análisis de la mañana (hacia las 07:00).",
                 "Solo entran picks muy probables (cuota 1,25–1,60) que no tengan EV negativo."]
-    out += ["", "<i>Si pierde, la serie termina y empieza otra con la base. Nunca subas el monto para recuperar.</i>"]
+    out += ["", "<i>Nunca subas la base para recuperar una serie perdida.</i>"]
     return "\n".join(out)
 
 

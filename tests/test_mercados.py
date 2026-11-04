@@ -89,7 +89,9 @@ def test_combinada_solo_con_valor():
     malas = [_c("C", "12:00", .70, 1.38), _c("D", "14:00", .68, 1.40)]
     j = J.combinada(buenas + malas, J.Reglas())
     assert j and {x["sel"] for x in j["patas"]} <= {"Gana A", "Gana B"} and j["ev"] >= 0.02
-    assert J.combinada(malas, J.Reglas()) is None
+    assert j["valor"] is True
+    respaldo = J.combinada(malas, J.Reglas())                # sin valor: sale la mejor posible, marcada
+    assert respaldo is None or respaldo["valor"] is False
 
 
 def test_escalera_crecimiento_real_avanza():
