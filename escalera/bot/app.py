@@ -162,7 +162,7 @@ def enviar_dia(dia, solo_tarjetas=False):
         return
     if not solo_tarjetas:
         al_usuario(M.resumen(dia, db.get("saldo")), boton_app())
-        for extra in (M.plan(dia), M.boletos(dia), M.mis_apuestas(dia)):
+        for extra in (M.plan(dia), M.boletos(dia), M.mis_apuestas(dia), M.tipster(dia)):
             if extra:
                 al_usuario(extra)
     for i in dia.get("plan", []):
@@ -226,6 +226,8 @@ def cmd(texto: str, chat_id) -> bool:
         tg.enviar(chat_id, M.escalera_estado(dia))
     elif c in ("/mis", "/apuestas"):
         tg.enviar(chat_id, M.mis_apuestas(dia) or "No tienes apuestas abiertas registradas.")
+    elif c in ("/tipster", "/sharpods"):
+        tg.enviar(chat_id, M.tipster(dia, db.tipster(sync.hoy()), siempre=True))
     elif c == "/tarjetas":
         enviar_dia(dia, solo_tarjetas=True)
     elif c == "/banca":
@@ -462,6 +464,16 @@ def conversar(chat_id, texto, imagen=None, fuente="texto"):
 # ---------------------------------------------------------------------------
 # Enrutador
 # ---------------------------------------------------------------------------
+def origen_canal(m: dict) -> str | None:
+    """Nombre del canal si el mensaje es un reenvío desde un canal (API nueva y vieja de Telegram)."""
+    o = m.get("forward_origin") or {}
+    chat = o.get("chat") if o.get("type") == "channel" else None
+    chat = chat or m.get("forward_from_chat")
+    if chat and chat.get("type") in ("channel", "supergroup", "group", None):
+        return (chat.get("title") or chat.get("username") or "Canal")[:60]
+    return None
+
+
 def procesar(u: dict):
     if "callback_query" in u:
         cb = u["callback_query"]
@@ -496,7 +508,12 @@ def procesar(u: dict):
     if observadores():
         reenviar_a_observadores(m)
     texto = (m.get("text") or m.get("caption") or "").strip()
-    if texto.startswith("/") and cmd(texto, chat_id):
+    canal_origen = origen_canal(m)
+    if canal_origen:                       # reenvío de un canal (Sharpods…): picks de tipster, no apuestas
+        db.put("espera", None)
+        texto = (f"[REENVIADO DESDE EL CANAL «{canal_origen}»: son picks de un tipster, NO apuestas del usuario. "
+                 f"Guárdalos con registrar_tipster (tipster = «{canal_origen}») y evalúalos.]\n" + texto)
+    elif texto.startswith("/") and cmd(texto, chat_id):
         return
     if "photo" in m or m.get("document", {}).get("mime_type", "").startswith("image/"):
         fid = m["photo"][-1]["file_id"] if "photo" in m else m["document"]["file_id"]
@@ -581,19 +598,6 @@ def periodicas():
                 al_usuario(m, silencioso=silencio)
         except Exception:
             log.exception("En vivo")
-    if t - _ultimo.get("liquidar", 0) > 600:
-        _ultimo["liquidar"] = t
-        try:
-            d = sync.dia()
-            msgs, cambio = en_vivo.liquidar_pendientes(d)
-            if cambio:
-                sync.guardar_dia(d)
-                panel.generar(d)
-                sync.publicar_registro()
-            for m in msgs:
-                al_usuario(m)
-        except Exception:
-            log.exception("Liquidar")
     if t - _ultimo["latido"] > 1800:
         _ultimo["latido"] = t
         sync.publicar_registro()

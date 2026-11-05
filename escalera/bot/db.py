@@ -189,3 +189,30 @@ def confirmaciones(fecha: str) -> dict:
 def vacia() -> bool:
     with _lock:
         return con().execute("SELECT COUNT(*) n FROM kv").fetchone()["n"] == 0
+
+
+# ---- picks de tipsters (Sharpods u otros canales reenviados) ---------------
+def tipster_guardar(items: list[dict], dias=10) -> list[dict]:
+    """Guarda picks de tipster (no son apuestas del usuario). Evita duplicados por
+    fecha + tipster + partido + selección y conserva solo los últimos `dias`."""
+    import datetime as dt
+    with _lock:
+        lista = get("tipster") or []
+        claves = {(x.get("fecha"), (x.get("tipster") or "").lower(), (x.get("partido") or "").lower(),
+                   (x.get("sel") or "").lower()) for x in lista}
+        nuevos = []
+        for it in items:
+            k = (it.get("fecha"), (it.get("tipster") or "").lower(), (it.get("partido") or "").lower(),
+                 (it.get("sel") or "").lower())
+            if k in claves:
+                continue
+            claves.add(k)
+            nuevos.append(it)
+        limite = (dt.date.today() - dt.timedelta(days=dias)).isoformat()
+        lista = [x for x in lista + nuevos if (x.get("fecha") or "") >= limite]
+        put("tipster", lista)
+    return nuevos
+
+
+def tipster(desde: str | None = None) -> list[dict]:
+    return [x for x in (get("tipster") or []) if not desde or (x.get("fecha") or "") >= desde]

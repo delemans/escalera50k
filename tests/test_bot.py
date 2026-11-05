@@ -176,3 +176,45 @@ def test_espejo_completo_con_observador_fijo(entorno, monkeypatch):
     assert any("No la hice" in t for t in a555)
     app.procesar({"message": {"message_id": 80, "chat": {"id": 555, "type": "private"}, "text": "hice 1"}})
     assert "modo lectura" in textos(env)[-1]
+
+
+def test_tipster_reenvio_guarda_y_muestra(entorno, monkeypatch):
+    from escalera.bot import ia
+    env, dia = entorno
+    vistos = {}
+
+    def falso_ia(hist, texto, imagen, dia_, reg, fecha, pol):
+        vistos["texto"] = texto
+        r = ia.ejecutar_herramienta("registrar_tipster", {"items": [
+            {"tipster": "SHARPODS DEPORTIVAS", "partido": "Fenerbahçe vs Liverpool", "sel": "Gana Liverpool",
+             "mercado": "1X2", "cuota": 1.44, "hora": "12:45"},
+            {"tipster": "SHARPODS DEPORTIVAS", "sel": "La del medio", "tipo": "combinada", "cuota": 5.28,
+             "piernas": [{"partido": "Viking vs Sabah", "sel": "Gana Viking", "o": 1.41}]}]}, dia_, pol, [])
+        return f"Guardé {r['guardados']}", []
+
+    monkeypatch.setattr(ia, "conversar", falso_ia)
+    msg = {"message_id": 50, "chat": {"id": 111, "type": "private"}, "text": "/hoy picks",
+           "forward_origin": {"type": "channel", "chat": {"id": -1001, "type": "channel", "title": "SHARPODS DEPORTIVAS"}}}
+    app.procesar({"message": msg})
+    assert "REENVIADO DESDE EL CANAL «SHARPODS DEPORTIVAS»" in vistos["texto"]   # no se toma como comando
+    assert not app._pendientes or all(p.get("accion") != "propia" for v in app._pendientes.values() for p in v)
+    hoy = db.tipster(sync.hoy())
+    assert len(hoy) == 2 and hoy[1]["tipo"] == "combinada"
+    app.procesar({"message": {**msg, "message_id": 51}})                         # repetido: no duplica
+    assert len(db.tipster(sync.hoy())) == 2
+    app.procesar({"message": {"message_id": 52, "chat": {"id": 111, "type": "private"}, "text": "/tipster"}})
+    t = textos(env)[-1]
+    assert "TIPSTER" in t and "Gana Liverpool" in t and "1,44" in t
+    import re
+    for tag in ("b", "i"):
+        assert len(re.findall(f"<{tag}>", t)) == len(re.findall(f"</{tag}>", t))
+
+
+def test_tipster_evaluado_por_la_mesa(entorno):
+    _, dia = entorno
+    dia = {**dia, "tipster": {"fuente": "Sharpods", "record": {"n": 4, "aciertos": 3, "roi": 0.12},
+                              "picks": [{"partido": "A vs B", "sel": "Gana A", "cuota": 1.44, "omin": 1.58,
+                                         "veredicto": "sin_valor", "nota": "Bajo la mínima"}]}}
+    t = M.tipster(dia, [])
+    assert "⚠️" in t and "mín. 1,58" in t and "3/4" in t
+    assert M.tipster({**dia, "tipster": None}, []) is None

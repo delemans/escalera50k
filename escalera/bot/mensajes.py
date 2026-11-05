@@ -548,6 +548,39 @@ def escalera_estado(dia: dict) -> str:
     return "\n".join(out)
 
 
+VEREDICTO_TIPSTER = {"valor": "✅", "sin_valor": "⚠️", "sin_modelo": "⚪", "descartado": "❌"}
+
+
+def tipster(dia: dict, recibidos: list[dict] | None = None, siempre: bool = False) -> str | None:
+    """Sección 🎯 TIPSTER: lo evaluado por la mesa (dia.tipster) y lo recibido hoy por reenvío."""
+    t = dia.get("tipster") or {}
+    evaluados = t.get("picks") or []
+    vistos = {(p.get("partido"), p.get("sel")) for p in evaluados}
+    nuevos = [r for r in (recibidos or []) if (r.get("partido"), r.get("sel")) not in vistos]
+    if not evaluados and not nuevos:
+        return ("🎯 Aún no tengo picks de tipster hoy.\nReenvíame el mensaje del canal (Sharpods…) "
+                "y lo guardo y evalúo.") if siempre else None
+    out = [_titulo("🎯", "TIPSTER", t.get("fuente") or "Sharpods"), LINEA]
+    for p in evaluados:
+        ic = ICONO_RES.get(p.get("resultado")) if p.get("resultado") not in (None, "pendiente") else \
+            VEREDICTO_TIPSTER.get(p.get("veredicto"), "•")
+        linea = f"{ic} {e(p.get('hora') or '')} {e(p.get('partido') or '')} · {e(p.get('sel'))} @ {cuota(p.get('cuota'))}"
+        if p.get("omin"):
+            linea += f" (mín. {cuota(p['omin'])})"
+        out.append(linea)
+        if p.get("nota"):
+            out.append(f"     ▸ {e(p['nota'])}")
+    for r in nuevos:
+        out.append(f"🕓 {e(r.get('hora') or '')} {e(r.get('partido') or '')} · {e(r.get('sel'))} @ {cuota(r.get('cuota'))}"
+                   " · recibido, la mesa lo evalúa en la próxima revisión")
+    rec = t.get("record") or {}
+    if rec.get("n"):
+        out += ["", f"📊 Récord {e(t.get('fuente') or 'tipster')}: {rec.get('aciertos', 0)}/{rec['n']} · "
+                    f"ROI {pct(rec.get('roi') or 0, True, 1)} (a 1 unidad por pick)"]
+    out += ["", "<i>Un tipster es un dato más: solo vale lo que pasa la cuota mínima.</i>"]
+    return "\n".join(out)
+
+
 def ayuda() -> str:
     return "\n".join([
         _titulo("🤖", "Cómo usarme"), LINEA,
@@ -563,5 +596,6 @@ def ayuda() -> str:
         "/stats estadísticas · /riesgo simulación",
         "/registro lo de hoy · /deshacer último registro",
         "/escalera tu escalera y el próximo peldaño · /mis tus apuestas · /cobro 45000",
+        "/tipster picks de Sharpods y su récord (reenvíame sus mensajes)",
         "/metodo cómo decide · /silencio recordatorios de noche · /ia qué IA está activa", "",
         "<i>No apuesto ni prometo resultados: te doy probabilidad y valor esperado.</i>"])

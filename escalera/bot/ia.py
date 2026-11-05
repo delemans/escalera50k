@@ -9,6 +9,7 @@ pasa al siguiente). Orden por defecto: IA_ORDEN=gemini,groq,openrouter,anthropic
   anthropic   Claude · de pago
 El modelo recibe el día publicado, tu registro y tus estadísticas, y puede usar:
   registrar_apuestas   propone lo que reportaste (tú confirmas con botón)
+  registrar_tipster    guarda picks de un tipster (Sharpods…) para evaluarlos y llevarles récord
   evaluar_cuota        EV, mínima y decisión con una cuota de BetPlay
   simular_riesgo       Monte Carlo de largo plazo con la política de stakes
 Las cuentas las hace el código (nucleo/), nunca el modelo de memoria.
@@ -54,6 +55,12 @@ REGISTRO
 - Si algo del pantallazo no se lee con seguridad (cuota, valor, equipos), déjalo en null, ponlo en "dudas" y pide un pantallazo más nítido.
 - Después de registrar, resume en una línea; el bot muestra el detalle con botones para confirmar.
 
+TIPSTERS (Sharpods u otros canales)
+- Si el mensaje viene marcado [REENVIADO DESDE EL CANAL …] o el usuario dice que son picks de un tipster/canal, NO son apuestas del usuario: nunca uses registrar_apuestas con ellos.
+- Usa registrar_tipster con cada pick: tipster (nombre del canal), partido "Local vs Visitante", sel, mercado (1X2, DNB, GOLES, BTTS, MARCA, TARJETAS, CORNERS u OTRO), cuota y hora (hora de Colombia). Una combinada va como UN item con tipo "combinada", sus piernas y la cuota total.
+- Si un pick coincide con una jugada del plan o un pick del día (mismo partido y selección), pon su id en ref y evalúalo con evaluar_cuota usando la cuota del tipster. Si no coincide, di que el sistema no tiene probabilidad propia para ese pick y que solo queda en seguimiento.
+- Responde corto: cuántos picks guardaste y, por cada uno, ✅ con valor / ⚠️ sin valor / ⚪ sin modelo. Recuerda que las combinadas largas tienen muy baja probabilidad.
+
 MONEDA: todo es en pesos colombianos ($3.000 = tres mil pesos), nunca USD ni dólares.
 
 FORMATO: texto plano (prohibido usar ** o #), emojis sobrios (🟢 🟡 ⚪ ✅ ❌ ⚠️ 📈). Sin Markdown, sin asteriscos, sin tablas. Coma decimal ($7.500, 1,45, 72 %)."""
@@ -71,6 +78,19 @@ HERRAMIENTAS = [
              "estado": {"type": ["string", "null"], "enum": ["abierta", "ganada", "perdida", "nula", None]},
              "piernas": {"type": "array", "items": {"type": "object", "properties": {
                  "partido": {"type": "string"}, "sel": {"type": "string"}, "o": {"type": ["number", "null"]}}}},
+             "dudas": {"type": ["string", "null"]}}}}}}},
+    {"name": "registrar_tipster",
+     "description": "Guarda picks publicados por un tipster o canal (Sharpods, etc.). NO son apuestas del usuario: quedan en seguimiento para evaluarlos y llevar su récord.",
+     "input_schema": {"type": "object", "required": ["items"], "properties": {"items": {"type": "array", "items": {
+         "type": "object", "required": ["tipster", "sel"], "properties": {
+             "tipster": {"type": "string"}, "partido": {"type": ["string", "null"]},
+             "sel": {"type": "string"}, "mercado": {"type": ["string", "null"]},
+             "cuota": {"type": ["number", "null"]}, "hora": {"type": ["string", "null"]},
+             "tipo": {"type": ["string", "null"], "enum": ["sencilla", "combinada", None]},
+             "ref": {"type": ["string", "null"]},
+             "piernas": {"type": "array", "items": {"type": "object", "properties": {
+                 "partido": {"type": "string"}, "sel": {"type": "string"}, "o": {"type": ["number", "null"]},
+                 "hora": {"type": ["string", "null"]}}}},
              "dudas": {"type": ["string", "null"]}}}}}}},
     {"name": "evaluar_cuota",
      "description": "Con la cuota que paga BetPlay para una jugada del plan (ref) o una probabilidad p, devuelve EV, cuota mínima, decisión y monto.",
@@ -92,6 +112,8 @@ def ejecutar_herramienta(nombre: str, args: dict, dia: dict, pol: STK.PoliticaSt
     if nombre == "registrar_apuestas":
         propuestas.extend(args.get("items", []))
         return {"ok": True, "nota": "Pendiente de confirmación con botón."}
+    if nombre == "registrar_tipster":
+        return guardar_tipster(args.get("items") or [])
     if nombre == "evaluar_cuota":
         item = next((i for i in dia.get("plan", []) if i["id"] == args.get("ref")), None)
         p = args.get("p") or (item or {}).get("p")
@@ -108,6 +130,24 @@ def ejecutar_herramienta(nombre: str, args: dict, dia: dict, pol: STK.PoliticaSt
         return SIM.largo_plazo(args.get("ev", 0.0), args.get("apuestas_dia", 2), pol.unidad_pct,
                                args.get("cuota_media", 1.6), args.get("dias", 60), caminos=1500)
     return {"error": "herramienta desconocida"}
+
+
+def guardar_tipster(items: list[dict]) -> dict:
+    import datetime as dt
+    from zoneinfo import ZoneInfo
+    from . import db
+    ahora = dt.datetime.now(ZoneInfo(config.TZ))
+    limpios = []
+    for i, it in enumerate(items):
+        if not it.get("sel"):
+            continue
+        limpios.append({"id": f"T{ahora:%Y%m%d%H%M%S}{i}", "fecha": ahora.date().isoformat(),
+                        "recibido": ahora.strftime("%d/%m %H:%M"), "tipster": (it.get("tipster") or "Tipster")[:60],
+                        "tipo": it.get("tipo") or ("combinada" if it.get("piernas") else "sencilla"),
+                        **{k: it.get(k) for k in ("partido", "sel", "mercado", "cuota", "hora", "ref", "piernas", "dudas")}})
+    nuevos = db.tipster_guardar(limpios)
+    return {"ok": True, "guardados": len(nuevos), "repetidos": len(limpios) - len(nuevos),
+            "nota": "Quedan en seguimiento (no son apuestas del usuario). La mesa los evalúa y liquida."}
 
 
 def _compacto_dia(dia: dict) -> dict:
@@ -140,6 +180,7 @@ def _compacto_dia(dia: dict) -> dict:
             "escalera": {"config": dia.get("progresionCfg"), "proximo": dia.get("escaleraCrec")},
             "riesgo": dia.get("riesgo"),
             "picks": picks, "jugadas": jug, "bancas": dia.get("bancas"), "politica": dia.get("politica"),
+            "tipster": dia.get("tipster"),
             "liquidado": dia.get("liquidado"), "alertas": dia.get("alertas"), "semaforo": dia.get("semaforo"),
             "simulacion": {k: (dia.get("simulacion") or {}).get(k) for k in ("apostado", "esperado", "pGanar")},
             "estadisticas": est}
@@ -148,10 +189,17 @@ def _compacto_dia(dia: dict) -> dict:
 def _contexto(dia: dict, registro: list, fecha: str, pol: STK.PoliticaStake) -> str:
     reg = [{k: a.get(k) for k in ("fecha", "accion", "ref", "sel", "cuota", "valor", "estado")}
            for a in registro[-15:]]
+    try:
+        from . import db
+        recibidos = [{k: t.get(k) for k in ("tipster", "partido", "sel", "cuota", "hora", "tipo")}
+                     for t in db.tipster((dia or {}).get("fecha"))][-20:]
+    except Exception:
+        recibidos = []
     return (f"\n\nAHORA (Bogotá): {fecha}\nPOLÍTICA: banca {pol.banca:.0f}, unidad {pol.unidad:.0f}, "
             f"tope diario {pol.tope_diario:.0f}, freno {'sí' if pol.freno else 'no'}"
             f"\n\nDÍA:\n{json.dumps(_compacto_dia(dia), ensure_ascii=False, separators=(',', ':'))[:12000]}"
-            f"\n\nREGISTRO DEL USUARIO:\n{json.dumps(reg, ensure_ascii=False, separators=(',', ':'))}")
+            f"\n\nREGISTRO DEL USUARIO:\n{json.dumps(reg, ensure_ascii=False, separators=(',', ':'))}"
+            f"\n\nPICKS DE TIPSTER RECIBIDOS HOY:\n{json.dumps(recibidos, ensure_ascii=False, separators=(',', ':'))}")
 
 
 def _media_type(img: bytes) -> str:

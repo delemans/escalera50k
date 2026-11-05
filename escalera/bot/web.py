@@ -3,6 +3,7 @@ SERVIDOR WEB INTERNO · para Render (o cualquier PaaS) sin Caddy ni Docker
 =========================================================================
   POST /telegram/<secreto>   webhook de Telegram (verifica el encabezado secreto)
   GET  /salud                estado del bot (público, para el "ping" que lo mantiene despierto)
+  GET  /tipster.json         picks de tipster reenviados (últimos 7 días, solo lectura, para la tarea)
   GET  /                     panel web con usuario y clave (PANEL_USUARIO / PANEL_CLAVE)
 Los updates se ponen en una cola; el hilo principal los procesa en orden.
 """
@@ -63,6 +64,12 @@ class Manejador(BaseHTTPRequestHandler):
             f = config.PANEL / "salud.json"
             cuerpo = f.read_bytes() if f.exists() else b'{"ok": true, "nota": "arrancando"}'
             return self._responder(200, cuerpo, "application/json")
+        if ruta == "/tipster.json":
+            import datetime as dt
+            from . import db
+            desde = (dt.date.today() - dt.timedelta(days=7)).isoformat()
+            cuerpo = json.dumps({"picks": db.tipster(desde)}, ensure_ascii=False).encode()
+            return self._responder(200, cuerpo, "application/json; charset=utf-8", {"Cache-Control": "no-store"})
         if ruta == "/app":
             from urllib.parse import parse_qs, urlparse
             from .panel import token_valido

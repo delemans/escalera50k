@@ -73,11 +73,11 @@ def publicar_registro():
     desde = (ahora() - dt.timedelta(days=7)).date().isoformat()
     cuerpo = {"version": 2, "latido": ahora().isoformat(timespec="minutes"), "chatId": ids()["chat"],
               "saldoReportado": db.get("saldo"), "apuestas": db.registro(desde, solo_pendientes=True),
+              "tipster": db.tipster(desde),
               "estado": {"fecha": hoy(), "confirmaciones": db.confirmaciones(hoy()), "diaMid": db.get("dia_mid_enviado"),
                          "avisos": db.avisos_desde(time.time() - 36 * 3600),
                          "silencioOff": bool(db.get("silencio_off")),
-                         "observadores": db.get("observadores") or {},
-                         "liquidadosBot": db.get("liquidados_bot") or {}}}
+                         "observadores": db.get("observadores") or {}}}
     msg = tg.enviar_json_fijado(canal, "registro.json", cuerpo, caption=f"💓 {cuerpo['latido']}",
                                 borrar_anterior=db.get("registro_mid"))
     if msg:
@@ -102,6 +102,8 @@ def restaurar() -> bool:
                 db.put("saldo", reg["saldoReportado"])
             if reg.get("apuestas"):
                 db.registrar(reg["apuestas"])
+            if reg.get("tipster"):
+                db.tipster_guardar(reg["tipster"])
             est = reg.get("estado") or {}
             db.put("silencio_off", bool(est.get("silencioOff")))
             for ref, estado in (est.get("confirmaciones") or {}).items():
@@ -111,8 +113,6 @@ def restaurar() -> bool:
             obs = {k: v for k, v in (est.get("observadores") or {}).items() if str(k) != str(i["chat"])}
             if obs:
                 db.put("observadores", obs)
-            if est.get("liquidadosBot"):
-                db.put("liquidados_bot", est["liquidadosBot"])
             if est.get("diaMid"):
                 db.put("dia_mid_enviado", est["diaMid"])
     revisar_dia_nuevo()            # deja el día en disco sin mandarlo

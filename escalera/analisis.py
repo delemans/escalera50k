@@ -23,6 +23,7 @@ from .nucleo import probabilidad as PR
 from .nucleo import riesgo as RIESGO
 from .nucleo import simulacion as SIM
 from .nucleo import staking as STK
+from .nucleo import tipster as TIP
 from .nucleo import validacion as VAL
 from .nucleo import valor as V
 from .nucleo.formato import fecha_corta, fecha_larga, pesos
@@ -276,7 +277,13 @@ def construir_dia(entrada: dict) -> dict:
         [{"nivel": "amarillo", "t": a} for a in ((ec or {}).get("avisos") or [])]
     if pol.freno:
         dia["alertas"].insert(0, {"nivel": "rojo", "t": "Banca real bajo el 70 %: stakes reales a la mitad."})
-    return {"dia": dia, "apuestasNuevas": [f for f in nuevas if f["id"] not in {x.get("id") for x in filas_previas}]}
+    tip_nuevas = []
+    if entrada.get("tipster") or any(f.get("tipster") for f in filas_previas):
+        ev_tip = TIP.evaluar(dia, entrada.get("tipster") or [], fecha)
+        tip_nuevas = TIP.filas_nuevas(ev_tip["picks"], filas_previas, fecha)
+        dia["tipster"] = {**ev_tip, "record": TIP.record(filas_previas)}
+    return {"dia": dia, "apuestasNuevas": [f for f in nuevas if f["id"] not in {x.get("id") for x in filas_previas}]
+            + tip_nuevas}
 
 
 def veredicto(dia: dict, avisos: list[str], hay_datos: bool) -> dict:
@@ -352,7 +359,7 @@ def liquidar_filas(filas: list[dict], marcadores: dict, progresion: dict | None 
     """marcadores = {"Local vs Visitante": "2-1" | "aplazado" | {"marcador": "2-1", "tarjetas": 5, "corners": 9}}."""
     cambios, prog = [], progresion
     for f in filas:
-        if f.get("resultado") != "pendiente":
+        if f.get("resultado") != "pendiente" or f.get("tipster"):     # los de tipster van aparte (TIP.liquidar)
             continue
         piernas = f.get("piernas") or [{"sel": f["seleccion"], "partido": f["partido"], "mercado": f.get("mercado"),
                                         "lado": f.get("lado"), "linea": f.get("linea")}]
@@ -378,4 +385,4 @@ def liquidar_filas(filas: list[dict], marcadores: dict, progresion: dict | None 
         cambios.append(nf)
         if f["tipo"] == "progresion" and prog:
             prog = LIQ.avanzar_progresion(prog, r["resultado"], base["stake"], base["cuotaRef"])
-    return {"filas": cambios, "progresion": prog}
+    return {"filas": cambios + TIP.liquidar(filas, marcadores), "progresion": prog}
