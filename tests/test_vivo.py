@@ -67,3 +67,24 @@ def test_riesgo_stop_y_escalera():
     assert t[0]["estado"] == "ganado" and t[1]["apuesta"] == 13860 and t[1]["cobro"] == round(13860 * 1.36)
     assert t[2]["apuesta"] == t[1]["cobro"]
     assert dt  # importado
+
+
+def test_bot_liquida_pendiente_de_ayer(monkeypatch):
+    from escalera.bot import db
+    db.put("liquidados_bot", {})
+    r = V.leer_resumen(FIX)
+    monkeypatch.setattr(V, "buscar_evento", lambda *a, **k: ("uefa.champions", "1"))
+    monkeypatch.setattr(V, "resumen_evento", lambda *a: {**r, "terminado": True})
+    dia = {"fecha": sync.hoy(), "misApuestas": [
+        {"id": "x2", "fecha": "2026-11-03", "hora": "12:45", "resultado": "pendiente", "partido": "Galatasaray vs VfB Stuttgart",
+         "seleccion": "Más de 4,5 tarjetas", "mercado": "TARJETAS", "lado": "over", "linea": 4.5,
+         "stakeReal": 1000, "cuotaReal": 2.0},
+        {"id": "x3", "fecha": "2026-11-03", "hora": "15:00", "resultado": "pendiente", "partido": "Galatasaray vs VfB Stuttgart",
+         "seleccion": "Stuttgart (empate no apuesta)", "mercado": "DNB", "lado": "2", "stakeReal": 1000, "cuotaReal": 2.14}]}
+    msgs, cambio = V.liquidar_pendientes(dia)
+    assert cambio and len(msgs) == 2
+    a, b = dia["misApuestas"]
+    assert a["resultado"] == "ganado" and a["netoReal"] == 1000
+    assert b["resultado"] == "perdido" and b["netoReal"] == -1000      # ganó el local
+    assert "LIQUIDADA" in msgs[0]
+    assert V.liquidar_pendientes(dia) == ([], False)                    # no repite

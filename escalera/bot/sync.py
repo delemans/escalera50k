@@ -76,7 +76,8 @@ def publicar_registro():
               "estado": {"fecha": hoy(), "confirmaciones": db.confirmaciones(hoy()), "diaMid": db.get("dia_mid_enviado"),
                          "avisos": db.avisos_desde(time.time() - 36 * 3600),
                          "silencioOff": bool(db.get("silencio_off")),
-                         "observadores": db.get("observadores") or {}}}
+                         "observadores": db.get("observadores") or {},
+                         "liquidadosBot": db.get("liquidados_bot") or {}}}
     msg = tg.enviar_json_fijado(canal, "registro.json", cuerpo, caption=f"💓 {cuerpo['latido']}",
                                 borrar_anterior=db.get("registro_mid"))
     if msg:
@@ -110,6 +111,8 @@ def restaurar() -> bool:
             obs = {k: v for k, v in (est.get("observadores") or {}).items() if str(k) != str(i["chat"])}
             if obs:
                 db.put("observadores", obs)
+            if est.get("liquidadosBot"):
+                db.put("liquidados_bot", est["liquidadosBot"])
             if est.get("diaMid"):
                 db.put("dia_mid_enviado", est["diaMid"])
     revisar_dia_nuevo()            # deja el día en disco sin mandarlo

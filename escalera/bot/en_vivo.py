@@ -330,3 +330,67 @@ def evaluar_cobro(dia: dict, oferta: float, banca: float, ref: str | None = None
     icono = {"COBRAR": "🟢", "COBRAR · ASEGURA": "🟢", "PARCIAL": "🟡", "AGUANTAR": "⚪"}[accion]
     return (f"{icono} <b>{accion}</b> · {e(a['titulo'])}\nOferta {pesos(oferta)} · valor justo ≈ {pesos(justo)}\n"
             f"Faltan {len(restantes)} piernas · pago total {pesos(a['stake'] * a['cuota'])}\n<i>{e(txt)}</i>")
+
+
+# ---------------------------------------------------------------------------
+# Liquidación propia del bot (no depende de la tarea de la noche)
+# ---------------------------------------------------------------------------
+def liquidar_pendientes(dia: dict) -> tuple[list[str], bool]:
+    """Revisa tus apuestas abiertas (de hoy o de días anteriores) y las cierra con el marcador final de ESPN.
+    → (mensajes, hubo_cambios)."""
+    if not dia:
+        return [], False
+    hechos = db.get("liquidados_bot") or {}
+    mensajes, cambio = [], False
+    for m in dia.get("misApuestas") or []:
+        if m.get("resultado") != "pendiente":
+            continue
+        if m.get("id") in hechos:                       # ya lo cerré antes (p. ej. tras un reinicio)
+            m.update(hechos[m["id"]])
+            cambio = True
+            continue
+        fecha = m.get("fecha") or dia.get("fecha")
+        try:
+            h, mi = map(int, (m.get("hora") or "00:00").split(":"))
+            inicio = dt.datetime.fromisoformat(fecha).replace(hour=h, minute=mi, tzinfo=ahora().tzinfo)
+        except (TypeError, ValueError):
+            continue
+        if ahora() < inicio + dt.timedelta(minutes=110):
+            continue
+        piernas = m.get("piernas") or [{"partido": m.get("partido"), "mercado": m.get("mercado"), "lado": m.get("lado"),
+                                         "linea": m.get("linea"), "sel": m.get("seleccion"), "lg": m.get("liga")}]
+        estados, marcadores = [], []
+        for pi in piernas:
+            if not pi.get("partido") or " vs " not in pi["partido"]:
+                estados = None
+                break
+            enc = buscar_evento(pi["partido"], pi.get("fecha") or fecha, pi.get("lg") or m.get("liga"))
+            r = resumen_evento(*enc) if enc else None
+            if not r or not r["terminado"]:
+                estados = None
+                break
+            estados.append(estado_pierna(pi, r["gl"], r["gv"], r["tarjetas"], r["corners"], True)[0])
+            marcadores.append(f"{r['gl']}-{r['gv']}")
+        if not estados:
+            continue
+        stake, o = m.get("stakeReal") or 0, m.get("cuotaReal") or 1
+        if "perdida" in estados:
+            res, neto = "perdido", -stake
+        elif all(x == "ganada" for x in estados):
+            res, neto = "ganado", stake * (o - 1)
+        elif len(estados) == 1 and estados[0] == "nula":
+            res, neto = "nulo", 0
+        else:
+            continue                                      # multi con una nula: la cierra la revisión de la noche
+        cierre = {"resultado": res, "netoReal": round(neto), "marcador": " · ".join(marcadores),
+                  "liquidadoPor": "bot (marcador ESPN)"}
+        m.update(cierre)
+        hechos[m["id"]] = cierre
+        cambio = True
+        ic = {"ganado": "✅", "perdido": "❌", "nulo": "➖"}[res]
+        mensajes.append(f"🧾 <b>LIQUIDADA</b> {ic} {e(m.get('partido'))}\n"
+                        f"▸ {e(m.get('seleccion'))} @ {cuota(o)} · final {e(cierre['marcador'])}\n"
+                        f"Resultado: <b>{res.upper()}</b> · {pesos(neto, True)}")
+    if cambio:
+        db.put("liquidados_bot", hechos)
+    return mensajes, cambio

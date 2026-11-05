@@ -581,6 +581,19 @@ def periodicas():
                 al_usuario(m, silencioso=silencio)
         except Exception:
             log.exception("En vivo")
+    if t - _ultimo.get("liquidar", 0) > 600:
+        _ultimo["liquidar"] = t
+        try:
+            d = sync.dia()
+            msgs, cambio = en_vivo.liquidar_pendientes(d)
+            if cambio:
+                sync.guardar_dia(d)
+                panel.generar(d)
+                sync.publicar_registro()
+            for m in msgs:
+                al_usuario(m)
+        except Exception:
+            log.exception("Liquidar")
     if t - _ultimo["latido"] > 1800:
         _ultimo["latido"] = t
         sync.publicar_registro()
