@@ -19,18 +19,22 @@ class Reglas:
     sencilla_cuota: tuple = (1.30, 2.60)
     max_por_liga: int = 2
     max_misma_hora: int = 2
-    escalera_p: float = 0.65
-    escalera_cuota: tuple = (1.30, 1.50)
+    escalera_p: float = 0.70           # crecer la banca: cada peldaño con p ≥ 70 %
+    escalera_cuota: tuple = (1.25, 1.50)
     escalera_gap_h: float = 2.0
+    escalera_peldanos: tuple = (5, 4, 3)   # se intenta 5; si el día no da, 4 y luego 3
+    escalera_retiro: int = 2           # antes del peldaño 3 se aparta la base y se sigue solo con la ganancia
+    escalera_ev_min: float = -0.05     # no se aceptan peldaños muy mal pagados
     progresion_cuota: tuple = (1.25, 1.60)
     combi_p: float = 0.55
     combi_cuota: tuple = (1.25, 2.20)
     combi_total: tuple = (2.0, 4.5)
     combi_ev_pierna: float = 0.0       # combinada de VALOR: cada pierna con EV ≥ 0
     combi_ev_total: float = 0.02
-    super_cuota_min: float = 100.0     # soñadora: cuota total mínima
-    super_piernas: tuple = (5, 20)
-    super_ev_pierna: float = -0.015    # picks más probables, casi justos o con valor
+    super_cuota: tuple = (5.0, 8.0)    # soñadora realista: cuota total 5–8
+    super_piernas: tuple = (4, 5)
+    super_p: float = 0.65              # cada pierna con p ≥ 65 %
+    super_ev_pierna: float = -0.03     # piernas casi justas o con valor
     max_busqueda: int = 14            # candidatos máx. para combinatoria
     stakes: dict = field(default_factory=lambda: {
         "sencilla": 3000, "escalera": 5000, "progresion": 5000, "combinada": 3000, "super": 1500})
@@ -74,37 +78,76 @@ def elegir_sencillas(cands: list[dict], r: Reglas) -> list[dict]:
     return sorted(elegidas, key=lambda c: c["t"])
 
 
+def montos_escalera(S: float, o: list[float], retiro: int = 2) -> dict:
+    """Montos de cada peldaño. Hasta el peldaño `retiro` todo lo cobrado pasa al siguiente;
+    antes del peldaño retiro+1 se aparta la base S y se sigue solo con la ganancia.
+    Devuelve {montos, final (lo que tienes si completa, base incluida), neto}."""
+    montos, m = [], S
+    for i, x in enumerate(o):
+        if i == retiro and i > 0:
+            m -= S                       # se aparta la base
+        montos.append(m)
+        m *= x
+    apartado = S if 0 < retiro < len(o) else 0
+    return {"montos": montos, "final": m + apartado, "neto": m + apartado - S}
+
+
+def ev_escalera(p: list[float], o: list[float], retiro: int = 2) -> float:
+    """EV por peso apostado: si ganan los primeros `retiro` peldaños la base ya está a salvo."""
+    S = 1.0
+    r = montos_escalera(S, o, retiro)
+    P = math.prod(p)
+    if 0 < retiro < len(o):
+        Pbase = math.prod(p[:retiro])
+        esperado = (Pbase - P) * S + P * r["final"]
+    else:
+        esperado = P * r["final"]
+    return esperado / S - 1
+
+
 def escalera(cands: list[dict], r: Reglas) -> tuple[dict | None, str | None]:
+    """Escalera para crecer la banca: 5 peldaños (o 4, o 3) con p ≥ 70 % y ≥ 2 h entre partidos."""
     pool = [c for c in cands if not c.get("alerta") and c["p"] >= r.escalera_p
+            and c["ev"] >= r.escalera_ev_min
             and r.escalera_cuota[0] <= c["o"] <= r.escalera_cuota[1]]
     pool = sorted(pool, key=lambda c: -c["p"])[: r.max_busqueda]
-    mejor, mejor_gap, aviso = None, -1e9, None
-    for trio in itertools.combinations(pool, 3):
-        if not _distintos(trio):
-            continue
-        trio = sorted(trio, key=lambda c: c["t"])
-        gaps = [(_min(trio[i + 1]["t"]) - _min(trio[i]["t"])) / 60 for i in range(2)]
-        g = min(gaps)
-        P = math.prod(c["p"] for c in trio)
-        ok = g >= r.escalera_gap_h
-        clave = (ok, P if ok else g)
-        if mejor is None or clave > mejor_gap:
-            mejor, mejor_gap = trio, clave
-    if not mejor:
-        return None, None
-    if not mejor_gap[0]:
+    mejor, aviso = None, None
+    for n in r.escalera_peldanos:
+        mejor_P = -1
+        for combo in itertools.combinations(pool, n):
+            if not _distintos(combo):
+                continue
+            combo = sorted(combo, key=lambda c: c["t"])
+            g = min((_min(combo[i + 1]["t"]) - _min(combo[i]["t"])) / 60 for i in range(n - 1))
+            if g < r.escalera_gap_h:
+                continue
+            P = math.prod(c["p"] for c in combo)
+            if P > mejor_P:
+                mejor, mejor_P = combo, P
+        if mejor:
+            break
+    if not mejor:                        # ninguna con 2 h: la de 3 más espaciada, con aviso
+        mejor_g = -1e9
+        for trio in itertools.combinations(pool, 3):
+            if not _distintos(trio):
+                continue
+            trio = sorted(trio, key=lambda c: c["t"])
+            g = min((_min(trio[i + 1]["t"]) - _min(trio[i]["t"])) / 60 for i in range(2))
+            if g > mejor_g:
+                mejor, mejor_g = trio, g
+        if not mejor:
+            return None, None
         aviso = "Escalera sin 2 h entre peldaños: es la más cercana posible."
     S = r.stakes["escalera"]
     o = [c["o"] for c in mejor]
     p = [c["p"] for c in mejor]
-    s2 = S * o[0]                    # peldaño 1 gana → TODO lo cobrado va al peldaño 2
-    s3 = s2 * o[1]                   # peldaño 2 gana → TODO va al peldaño 3
-    final = s3 * o[2]
+    m = montos_escalera(S, o, r.escalera_retiro)
     P = math.prod(p)
-    ev = P * final / S - 1
     return {"tipo": "escalera", "stake": S, "patas": [_pata(c) for c in mejor],
-            "P": round(P, 4), "ev": round(ev, 4), "final": round(final),
-            "montos": [S, round(s2), round(s3)]}, aviso
+            "peldanos": len(mejor), "retiro": r.escalera_retiro,
+            "P": round(P, 4), "Pbase": round(math.prod(p[: r.escalera_retiro]), 4),
+            "ev": round(ev_escalera(p, o, r.escalera_retiro), 4), "final": round(m["final"]),
+            "montos": [round(x) for x in m["montos"]], "probs": [round(x, 4) for x in p]}, aviso
 
 
 def progresion(cands: list[dict], r: Reglas, cfg: dict) -> dict | None:
@@ -166,9 +209,9 @@ def combinada(cands, r: Reglas):
 
 
 def super_(cands, r: Reglas):
-    """Soñadora para crecer el bank: los picks MÁS PROBABLES del día (una pierna por partido)
-    hasta cuota total ≥ 100. Solo piernas casi justas o con valor (EV ≥ −1,5 %)."""
-    for umbral in (r.super_ev_pierna, -0.03, -0.06):   # si no alcanza 100, se abre un poco el filtro
+    """Soñadora para crecer el bank: 4–5 piernas, cada una con p ≥ 65 %, cuota total 5–8.
+    Se elige la combinación MÁS PROBABLE dentro de ese rango (una pierna por partido)."""
+    for umbral in (r.super_ev_pierna, -0.06):   # si no sale, se abre un poco el filtro de EV
         j = _sonadora(cands, r, umbral)
         if j:
             j["umbralEv"] = umbral
@@ -177,26 +220,27 @@ def super_(cands, r: Reglas):
 
 
 def _sonadora(cands, r: Reglas, umbral: float):
-    pool = [c for c in cands if not c.get("alerta") and c["ev"] >= umbral]
-    pool.sort(key=lambda c: (-c["p"], -c["ev"]))
-    elegidas, vistos, cuota = [], set(), 1.0
-    for c in pool:
-        if (c["h"], c["a"]) in vistos:
-            continue
-        elegidas.append(c)
-        vistos.add((c["h"], c["a"]))
-        cuota *= c["o"]
-        if cuota >= r.super_cuota_min and len(elegidas) >= r.super_piernas[0]:
-            break
-        if len(elegidas) >= r.super_piernas[1] + 5:
-            break
-    if cuota < r.super_cuota_min or len(elegidas) < r.super_piernas[0]:
+    pool = [c for c in cands if not c.get("alerta") and c["p"] >= r.super_p and c["ev"] >= umbral]
+    pool = sorted(pool, key=lambda c: (-c["p"], -c["ev"]))[: r.max_busqueda]
+    mejor, mejor_P = None, -1
+    for n in range(r.super_piernas[0], r.super_piernas[1] + 1):
+        for combo in itertools.combinations(pool, n):
+            if not _distintos(combo):
+                continue
+            cuota = math.prod(c["o"] for c in combo)
+            if not (r.super_cuota[0] <= cuota <= r.super_cuota[1]):
+                continue
+            P = math.prod(c["p"] for c in combo)
+            if P > mejor_P:
+                mejor, mejor_P = combo, P
+    if not mejor:
         return None
-    elegidas.sort(key=lambda c: c["t"])
+    elegidas = sorted(mejor, key=lambda c: c["t"])
+    cuota = math.prod(c["o"] for c in elegidas)
     P = math.prod(c["p"] for c in elegidas)
     return {"tipo": "super", "stake": r.stakes["super"], "patas": [_pata(c) for c in elegidas],
-            "cuota": round(cuota, 2), "P": round(P, 6), "ev": round(P * cuota - 1, 4),
-            "omin": round(V.cuota_minima(P), 1), "probs": [round(c["p"], 4) for c in elegidas]}
+            "cuota": round(cuota, 2), "P": round(P, 4), "ev": round(P * cuota - 1, 4),
+            "omin": round(V.cuota_minima(P), 2), "probs": [round(c["p"], 4) for c in elegidas]}
 
 
 def armar(cands: list[dict], fecha: str, cfg_prog: dict, r: Reglas | None = None) -> tuple[dict, list[str]]:

@@ -23,15 +23,24 @@ def liquidar(fila: dict, piernas: list[str]) -> dict:
         return {"resultado": r, "neto": round(S * (o - 1)) if r == "ganado" else -S}
 
     if tipo == "escalera":
+        # Peldaños 1..retiro: todo lo cobrado pasa al siguiente. Antes del peldaño retiro+1 se aparta
+        # la base y se sigue con la ganancia: si falla de ahí en adelante, el neto es 0 (base a salvo).
         o = [p["o"] for p in fila["piernas"]]
+        retiro = fila.get("retiro", 2)
         for i, r in enumerate(piernas):
             if r == "perdido":
-                return {"resultado": "perdido", "neto": -S if i < 2 else 0}
+                return {"resultado": "perdido", "neto": -S if i < retiro else 0}
             if r == "pendiente":
                 return {"resultado": "pendiente"}
         # nulos: el peldaño nulo cuenta como cuota 1
         o = [1.0 if r == "nulo" else x for x, r in zip(o, piernas)]
-        return {"resultado": "ganado", "neto": round((S * o[0] * o[1] - S) * o[2])}
+        m = S
+        for i, x in enumerate(o):
+            if i == retiro and i > 0:
+                m -= S
+            m *= x
+        apartado = S if 0 < retiro < len(o) else 0
+        return {"resultado": "ganado", "neto": round(m + apartado - S)}
 
     # combinada / super
     if "perdido" in piernas:

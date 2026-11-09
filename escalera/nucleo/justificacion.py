@@ -91,8 +91,12 @@ def por_que_jugada(tipo: str, j: dict) -> list[str]:
         return []
     P = j.get("P", 0)
     if tipo == "escalera":
-        return ["Tres favoritos con p ≥ 65 % y al menos 2 h entre partidos, para reinvertir con calma.",
-                f"Cada peldaño que gana pasa TODO al siguiente; completa {_pct(P)} de las veces."]
+        n = len(j.get("patas", []))
+        r = j.get("retiro", 2)
+        return [f"{n} peldaños con p ≥ 70 % y al menos 2 h entre partidos, para crecer la banca.",
+                f"Peldaños 1–{r}: todo lo cobrado pasa al siguiente. Antes del peldaño {r + 1} se aparta la base "
+                f"(queda a salvo {_pct(j.get('Pbase') or 0)} de las veces) y se sigue solo con la ganancia.",
+                f"Completa {_pct(P)} de las veces."]
     if tipo == "combinada":
         intro = (f"Combinada de valor: cada pierna tiene EV ≥ 0 y el boleto suma EV {_pct(j.get('ev') or 0)}."
                  if j.get("valor", True) else
@@ -100,9 +104,10 @@ def por_que_jugada(tipo: str, j: dict) -> list[str]:
         return [intro,
                 f"Paga {_c(j.get('cuota') or 0)} y gana {_pct(P)} de las veces."]
     if tipo == "super":
-        return [f"Soñadora: {len(j.get('patas', []))} piernas, las más probables del día, para una cuota de {_c(j.get('cuota') or 0)}.",
-                f"Prob. {_pct(P, 2)}: se acierta muy pocas veces; por eso va siempre con la apuesta mínima.",
-                f"EV del boleto {_pct(j.get('ev') or 0)} (ojo: con tantas piernas un error pequeño en cada una cambia mucho)."]
+        return [f"Soñadora: {len(j.get('patas', []))} piernas con p ≥ 65 %, la combinación más probable del día para cuota 5–8 "
+                f"(hoy {_c(j.get('cuota') or 0)}).",
+                f"Prob. {_pct(P, 1)}: entra más o menos 1 de cada {max(1, round(1 / P)) if P else '—'} veces; va con la apuesta mínima.",
+                f"EV del boleto {_pct(j.get('ev') or 0)}."]
     if tipo == "progresion":
         return ["Escalera de crecimiento: el pick más seguro del día (cuota 1,25–1,60) para reinvertir todo lo ganado.",
                 "Si pierde, la serie termina y empieza otra con la base."]

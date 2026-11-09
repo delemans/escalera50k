@@ -115,8 +115,8 @@ def _linea_liquidado(x):
 # ---------------------------------------------------------------------------
 # 2. Plan del día (qué hacer con cada una)
 # ---------------------------------------------------------------------------
-GRUPOS = [("sencilla", "🎯 INDIVIDUALES CON VALOR"), ("escalera", "🪜 ESCALERA DEL DÍA (3 partidos, todo al siguiente)"), ("combinada", "🔗 COMBINADA"),
-          ("super", "🌙 SOÑADORA (cuota 100+)"), ("progresion", "📈 ESCALERA DE CRECIMIENTO")]
+GRUPOS = [("sencilla", "🎯 INDIVIDUALES CON VALOR"), ("escalera", "🪜 ESCALERA DEL DÍA (picks de 70 %)"), ("combinada", "🔗 COMBINADA"),
+          ("super", "🌙 SOÑADORA (cuota 5–8)"), ("progresion", "📈 ESCALERA DE CRECIMIENTO")]
 NOMBRE_TIPO = {"sencilla": "Individual", "escalera": "Escalera", "combinada": "Combinada",
                "super": "Soñadora", "progresion": "Escalera de crecimiento"}
 
@@ -150,7 +150,7 @@ def plan(dia: dict) -> str | None:
         out.append("")
     faltan = [n for t, n in GRUPOS if t in ("sencilla", "combinada", "super") and not any(i["tipo"] == t for i in items)]
     for n in faltan:
-        motivo = {"🌙 SOÑADORA (cuota 100+)": "no hay suficientes partidos probables para llegar a cuota 100"}.get(
+        motivo = {"🌙 SOÑADORA (cuota 5–8)": "no hay 4–5 picks de 65 % que sumen cuota 5–8"}.get(
             n, "ningún pick pasa los filtros")
         out.append(f"<b>{n}</b>\n     hoy no sale: {motivo}\n")
     total = sum(i["monto"] for i in items if i["accion"] == "APOSTAR" and i["tipo"] != "progresion")
@@ -224,18 +224,22 @@ def _cuerpo_sencilla(dia, item):
 
 def _cuerpo_escalera(dia, item):
     j = dia["jugadas"]["escalera"]
-    montos = j.get("montos") or [j["stake"], None, None]
+    montos = j.get("montos") or [j["stake"]] + [None] * (len(j["patas"]) - 1)
+    retiro = j.get("retiro", 2)
     factor = (item["monto"] / j["stake"]) if item["monto"] else 1
     out = []
     for n, (x, m) in enumerate(zip(j["patas"], montos), 1):
         monto = pesos(m * factor) if m else "—"
-        nota = " (todo lo cobrado)" if n > 1 else ""
+        nota = (" (todo lo cobrado)" if 1 < n <= retiro else
+                " (solo la ganancia: la base ya se apartó)" if n == retiro + 1 else
+                " (todo lo cobrado)" if n > retiro + 1 else "")
         out += [f"<b>{n}.</b> {e(x['t'])} · {e(x['partido'])}",
                 f"    ▸ {e(x['sel'])} @ {cuota(x['o'])} · apuestas <b>{monto}</b>{nota}"]
     if not item["monto"]:
         out.append("<i>Montos de la simulación del sistema (no es dinero real hoy).</i>")
     out += ["", f"🏁 Si completa: <b>{pesos(j['final'] * factor)}</b> · prob. {pct(j['P'], dec=1)}",
-            "Cada peldaño que gana pasa TODO al siguiente · si uno falla, se pierde lo apostado y se reinicia"]
+            f"Peldaños 1–{retiro}: todo al siguiente · antes del {retiro + 1} apartas la base "
+            f"{pesos(j['stake'] * factor)} · si falla después, la base queda a salvo"]
     out += _por_que(dia, "escalera")
     return out
 

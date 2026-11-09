@@ -18,12 +18,16 @@ def _resultado_jugada(j: dict, gana: dict) -> float:
         return 0.0
     patas = j["patas"]
     if j["tipo"] == "escalera":
-        o = [p["o"] for p in patas]
-        if not gana[patas[0]["id"]] or not gana[patas[1]["id"]]:
-            return -S
-        if not gana[patas[2]["id"]]:
-            return 0.0
-        return (S * o[0] * o[1] - S) * o[2]
+        retiro = j.get("retiro", 2)
+        for i, p in enumerate(patas):
+            if not gana[p["id"]]:
+                return -S if i < retiro else 0.0
+        m = S
+        for i, p in enumerate(patas):
+            if i == retiro and i > 0:
+                m -= S
+            m *= p["o"]
+        return m + (S if 0 < retiro < len(patas) else 0) - S
     if all(gana[p["id"]] for p in patas):
         c = 1.0
         for p in patas:
