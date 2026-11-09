@@ -62,3 +62,13 @@ def test_fase2_criterios():
     c = canal.criterios({"estadisticas": {"sistema": {"n": 40, "icRoi90": [-0.1, 0.2], "pValor": 0.4}}}, "2026-11-03")
     assert not c["listo"] and len(c["checks"]) == 4
     assert "Aún no" in canal.mensaje_fase2({}, "2026-11-03")
+
+
+def test_escaneo_pedido_y_atendido(monkeypatch):
+    from escalera.bot import app
+    db.put("escaneo", None)
+    txt = app.pedir_escaneo()
+    assert "Escaneo pedido" in txt or "mañana" in txt
+    assert db.get("escaneo")["pedido"] and db.get("escaneo")["atendido"] is None
+    assert "Ya hay" in app.pedir_escaneo()                       # no duplica
+    assert len(app.firma_escaneo()) == 16

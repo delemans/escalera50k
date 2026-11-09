@@ -599,6 +599,7 @@ def ayuda() -> str:
         "✍️ «hice 1 y 3», «la combinada a 2,80 por 3000», «BetPlay paga 1,40 el 2».",
         "💬 Cualquier pregunta sobre el sistema o los picks.", "",
         "<b>Comandos</b>",
+        "/escanear pedir un escaneo nuevo del día (arranca en menos de 1 hora)",
         "/hoy resumen · /plan qué hacer · /tarjetas botones",
         "/banca control · /saldo 100000 tu saldo real",
         "/stats estadísticas · /riesgo simulación",

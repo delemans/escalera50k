@@ -4,6 +4,8 @@ SERVIDOR WEB INTERNO · para Render (o cualquier PaaS) sin Caddy ni Docker
   POST /telegram/<secreto>   webhook de Telegram (verifica el encabezado secreto)
   GET  /salud                estado del bot (público, para el "ping" que lo mantiene despierto)
   GET  /tipster.json         picks de tipster reenviados (últimos 7 días, solo lectura, para la tarea)
+  GET  /escaneo.json         ¿hay un escaneo pedido con /escanear? (para la tarea vigía)
+  GET  /escaneo/atendido?firma=…   la vigía marca el pedido como lanzado
   GET  /                     panel web con usuario y clave (PANEL_USUARIO / PANEL_CLAVE)
 Los updates se ponen en una cola; el hilo principal los procesa en orden.
 """
@@ -70,6 +72,22 @@ class Manejador(BaseHTTPRequestHandler):
             desde = (dt.date.today() - dt.timedelta(days=7)).isoformat()
             cuerpo = json.dumps({"picks": db.tipster(desde)}, ensure_ascii=False).encode()
             return self._responder(200, cuerpo, "application/json; charset=utf-8", {"Cache-Control": "no-store"})
+        if ruta == "/escaneo.json":
+            from . import db
+            e = db.get("escaneo") or {}
+            pendiente = bool(e.get("pedido") and not e.get("atendido"))
+            cuerpo = json.dumps({"pendiente": pendiente, **e}, ensure_ascii=False).encode()
+            return self._responder(200, cuerpo, "application/json; charset=utf-8", {"Cache-Control": "no-store"})
+        if ruta == "/escaneo/atendido":
+            from urllib.parse import parse_qs, urlparse
+            from . import db, sync
+            from .app import firma_escaneo
+            firma = (parse_qs(urlparse(self.path).query).get("firma") or [""])[0]
+            if not hmac.compare_digest(firma, firma_escaneo()):
+                return self._responder(403, b'{"ok": false}', "application/json")
+            e = db.get("escaneo") or {}
+            db.put("escaneo", {**e, "atendido": sync.ahora().isoformat(timespec="minutes")})
+            return self._responder(200, b'{"ok": true}', "application/json")
         if ruta == "/app":
             from urllib.parse import parse_qs, urlparse
             from .panel import token_valido

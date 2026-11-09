@@ -14,6 +14,7 @@ En cualquier momento: texto, pantallazo o voz → Claude responde y registra.
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 import queue
 import re
@@ -45,6 +46,26 @@ def al_usuario(texto, botones=None, silencioso=False):
 # ---------------------------------------------------------------------------
 # Observadores · modo lectura (reciben copia de todo, sin botones ni registro)
 # ---------------------------------------------------------------------------
+def firma_escaneo() -> str:
+    """Firma que la tarea vigía usa para marcar el pedido como atendido (derivada del token, no lo revela)."""
+    return hashlib.sha256(("escaneo:" + config.TOKEN_BOT).encode()).hexdigest()[:16]
+
+
+def pedir_escaneo() -> str:
+    """/escanear: deja el pedido marcado; la tarea vigía de Claude lo lanza en menos de 1 hora."""
+    ahora = sync.ahora()
+    previo = db.get("escaneo") or {}
+    if previo.get("pedido") and not previo.get("atendido"):
+        return ("⏳ Ya hay un escaneo pedido (" + previo["pedido"][11:16] + "). Arranca en menos de 1 hora "
+                "y te llega la notificación cuando esté.")
+    if not (7 <= ahora.hour < 20):
+        nota = "La vigía revisa de 7 a. m. a 8 p. m.: se lanzará en la primera revisión de mañana."
+    else:
+        nota = "La vigía revisa cada hora: arranca en menos de 1 hora y tarda 10–20 minutos."
+    db.put("escaneo", {"pedido": ahora.isoformat(timespec="minutes"), "atendido": None})
+    return "🔎 <b>Escaneo pedido</b>\n" + nota + "\nSolo entran partidos que empiecen después de que arranque."
+
+
 def observadores() -> dict:
     obs = dict(db.get("observadores") or {})
     for cid in config.OBSERVADORES:                    # fijos en Render: sobreviven a cualquier reinicio
@@ -224,6 +245,8 @@ def cmd(texto: str, chat_id) -> bool:
         tg.enviar(chat_id, canal.enlace_vip())
     elif c in ("/escalera", "/peldano", "/peldaño"):
         tg.enviar(chat_id, M.escalera_estado(dia))
+    elif c in ("/escanear", "/escanea", "/scan"):
+        tg.enviar(chat_id, pedir_escaneo())
     elif c in ("/mis", "/apuestas"):
         tg.enviar(chat_id, M.mis_apuestas(dia) or "No tienes apuestas abiertas registradas.")
     elif c in ("/tipster", "/sharpods"):
@@ -620,7 +643,7 @@ def periodicas():
         log.info("Respaldo: %s", db.respaldar())
 
 
-COMANDOS = [("hoy", "Resumen y jugadas del día"), ("plan", "Qué hacer con cada jugada"), ("app", "Abrir la app en el celular"), ("invitar", "Invitar a alguien en modo lectura"), ("boletos", "Qué montar en BetPlay"),
+COMANDOS = [("escanear", "Pedir un escaneo nuevo del día"), ("hoy", "Resumen y jugadas del día"), ("plan", "Qué hacer con cada jugada"), ("app", "Abrir la app en el celular"), ("invitar", "Invitar a alguien en modo lectura"), ("boletos", "Qué montar en BetPlay"),
             ("informe", "Métricas e informe"), ("mis", "Tus apuestas abiertas"), ("escalera", "Tu escalera y el próximo peldaño"), ("cobro", "¿Cobrar ya? /cobro 45000"),
             ("tarjetas", "Tarjetas con botones"), ("banca", "Banca, unidad y tope"),
             ("saldo", "Reportar tu saldo de BetPlay"), ("stats", "Estadísticas"),
