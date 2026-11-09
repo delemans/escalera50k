@@ -647,9 +647,9 @@ def periodicas():
     if t - _ultimo["alertas"] > 60:
         _ultimo["alertas"] = t
         enviados = 0
-        for clave, texto, botones in alertas.pendientes(sync.dia()):
+        for clave, texto, botones in alertas.pendientes(sync.dia())[:5]:   # máx. 5 avisos por vuelta
+            alertas.marcar(clave)              # se marca ANTES de enviar: nunca se repite aunque Telegram falle
             if al_usuario(texto, botones):
-                db.marcar_aviso(clave)
                 enviados += 1
         if enviados and config.EFIMERO:
             sync.publicar_registro()          # guarda en Telegram qué avisos ya salieron

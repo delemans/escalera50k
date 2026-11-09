@@ -218,3 +218,17 @@ def test_tipster_evaluado_por_la_mesa(entorno):
     t = M.tipster(dia, [])
     assert "⚠️" in t and "mín. 1,58" in t and "3/4" in t
     assert M.tipster({**dia, "tipster": None}, []) is None
+
+
+def test_aviso_sin_dia_no_se_repite(monkeypatch):
+    import datetime as dt
+    from escalera.bot import alertas as AL
+    monkeypatch.setattr(AL, "ahora", lambda: dt.datetime(2026, 11, 9, 8, 30))
+    viejo = {"fecha": "2026-11-08"}
+    claves = [c for c, _, _ in AL.pendientes(viejo)]
+    assert "sin-dia-2026-11-09" in claves
+    AL.marcar("sin-dia-2026-11-09")
+    monkeypatch.setattr(db, "aviso_enviado", lambda c: False)        # aunque la base "olvide"
+    assert "sin-dia-2026-11-09" not in [c for c, _, _ in AL.pendientes(viejo)]
+    monkeypatch.setattr(AL, "ahora", lambda: dt.datetime(2026, 11, 10, 13, 0))
+    assert not any(c.startswith("sin-dia") for c, _, _ in AL.pendientes(viejo))   # fuera de 8–10 a. m. no sale

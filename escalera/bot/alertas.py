@@ -76,6 +76,17 @@ def avisos_de_registro(item: dict, dia: dict, apostado_hoy: float) -> list[str]:
 # ---------------------------------------------------------------------------
 # Revisión periódica → [(clave, texto, botones)]
 # ---------------------------------------------------------------------------
+_ENVIADOS: set[str] = set()      # respaldo en memoria: si la base falla o se reinicia, no se repite en este proceso
+
+
+def marcar(clave: str):
+    _ENVIADOS.add(clave)
+    try:
+        db.marcar_aviso(clave)
+    except Exception:
+        pass
+
+
 def pendientes(dia: dict) -> list[tuple[str, str, list | None]]:
     t = ahora()
     hoy = t.date().isoformat()
@@ -83,8 +94,9 @@ def pendientes(dia: dict) -> list[tuple[str, str, list | None]]:
     out: list[tuple[str, str, list | None]] = []
 
     def add(clave, texto, botones=None):
-        if not db.aviso_enviado(clave):
-            out.append((clave, texto, botones))
+        if clave in _ENVIADOS or db.aviso_enviado(clave):
+            return
+        out.append((clave, texto, botones))
 
     real = db.get("saldo") or (dia.get("bancas") or {}).get("real")
     if real is not None and real < config.BANCA_ALERTA_PCT * config.BANCA_INICIAL:
@@ -101,7 +113,7 @@ def pendientes(dia: dict) -> list[tuple[str, str, list | None]]:
         add(f"racha-{dia.get('fecha')}", M.alerta("naranja", f"{racha['actual']} pérdidas seguidas",
             "Las rachas son normales con estas probabilidades, pero es cuando más se sube el stake por impulso.",
             "Mantén el stake sugerido o tómate el día."))
-    if t.hour >= 8 and dia.get("fecha") != hoy:
+    if 8 <= t.hour < 10 and dia.get("fecha") != hoy:      # solo en esa ventana: un reinicio más tarde no lo repite
         add(f"sin-dia-{hoy}", M.alerta("amarillo", "Aún no llegan las jugadas de hoy",
             "La mesa de análisis no ha publicado el día. Puede ir tarde.", "Escribe /hoy más tarde."))
     for x in dia.get("liquidado") or []:
