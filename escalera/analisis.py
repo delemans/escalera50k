@@ -105,6 +105,8 @@ def candidatos_statarea(filas: list[dict], umbral: int = 50, hora_min: str = "07
             out.append({**base, "mercado": "DC", "lado": "1X", "fuerza": (p1 + px) / 100})
         elif p2 > p1 and p2 + px >= 72 and p2 < 70:
             out.append({**base, "mercado": "DC", "lado": "X2", "fuerza": (p2 + px) / 100})
+        if p1 + p2 >= 76 and px <= 24:
+            out.append({**base, "mercado": "DC", "lado": "12", "fuerza": (p1 + p2) / 100})
         if f["o25"] >= 62:
             out.append({**base, "mercado": "GOLES", "linea": 2.5, "lado": "over", "fuerza": f["o25"] / 100})
         elif f["o25"] <= 38:
@@ -187,6 +189,35 @@ def evaluar(c: dict, exigir_verificado: bool = False) -> dict:
     return c
 
 
+def detalle_jugada(j: dict, validos: list[dict]) -> list[dict]:
+    """Análisis de cada pierna: datos, razones a favor/en contra y alternativas que se dejaron."""
+    por_id = {c["id"]: c for c in validos}
+    elegidos = {x["id"] for x in j.get("patas", [])}
+    out = []
+    for n, x in enumerate(j.get("patas", []), 1):
+        c = por_id.get(x["id"], {})
+        jus = c.get("justificacion") or {}
+        franja = int(str(x.get("t", "00"))[:2]) // 2
+        alternativas = sorted(
+            [v for v in validos if v["id"] not in elegidos and int(v["t"][:2]) // 2 == franja
+             and (v["h"], v["a"]) != (c.get("h"), c.get("a"))], key=lambda v: -v["p"])[:2]
+        razones = [f"Probabilidad {JUS._pct(c.get('p') or 0)} (mercado {JUS._pct(c.get('mk') or 0)}"
+                   + (f", StatArea {JUS._pct(c['sa'])}" if c.get("sa") is not None else ", sin StatArea") + ")."]
+        if c.get("o") and c.get("omin"):
+            razones.append(f"Cuota {JUS._c(c['o'])} ({c.get('bk') or 'mejor casa'}); mínima para apostar {JUS._c(c['omin'])}.")
+        if c.get("nCasas"):
+            razones.append(f"{c['nCasas']} casas comparadas" + (" con Pinnacle/afilada." if c.get("afilada") else "."))
+        if alternativas:
+            razones.append("Se prefirió frente a " + ", ".join(f"{v['sel']} ({JUS._pct(v['p'], 0)})" for v in alternativas)
+                           + ": " + ("más probable." if all(v["p"] <= (c.get("p") or 0) for v in alternativas)
+                                     else "mejor encaje de horario con los otros peldaños."))
+        out.append({"n": n, "id": x["id"], "t": x.get("t"), "partido": x.get("partido"), "sel": x.get("sel"),
+                    "p": c.get("p"), "o": c.get("o"), "omin": c.get("omin"), "ev": c.get("ev"),
+                    "confianza": c.get("confianza"), "razones": razones,
+                    "aFavor": jus.get("aFavor", []), "enContra": jus.get("enContra", [])})
+    return out
+
+
 def _pick_publico(c: dict) -> dict:
     claves = ["id", "h", "a", "lg", "t", "mercado", "lado", "linea", "sel", "o", "bk", "sa", "mk", "p", "p_push",
               "ev", "omin", "kelly", "valor", "noticias", "alerta", "motivo", "nCasas", "dispersion", "afilada",
@@ -218,7 +249,9 @@ def construir_dia(entrada: dict) -> dict:
     validos = [c for c in evaluados if not c["descartado"]]
 
     stakes = banca_cfg.get("stakes") or JUG.Reglas().stakes
-    reglas = JUG.Reglas(stakes=stakes)
+    rend = EST.rendimiento_picks(filas_previas)
+    bloqueados = {m for m, d in rend["porMercado"].items() if d.get("bloqueado")}
+    reglas = JUG.Reglas(stakes=stakes, mercados_bloqueados=bloqueados)
     jug, avisos = JUG.armar(validos, fecha, prog_cfg, reglas)
 
     usados = set(jug["sencillas"]["ids"])
@@ -237,7 +270,9 @@ def construir_dia(entrada: dict) -> dict:
         nuevas.append(_fila_apuesta({"id": pid, "tipo": "sencilla", "fecha": fecha, "hora": c["t"],
                                      "partido": f"{c['h']} vs {c['a']}", "seleccion": c["sel"],
                                      "liga": c["lg"], "cuotaRef": c["o"], "bk": c["bk"], "p": c["p"],
-                                     "mk": c["mk"], "sa": c["sa"], "ev": c["ev"],
+                                     "mk": c["mk"], "sa": c["sa"], "ev": c["ev"], "mercado": c.get("mercado"),
+                                     "lado": c.get("lado"), "linea": c.get("linea"),
+                                     **({"equipo": c["equipo"]} if c.get("equipo") else {}),
                                      "stake": stakes["sencilla"]}, creado + n))
     for k, j in ((k, jug[k]) for k in ("escalera", "progresion", "combinada", "super")):
         if not j:
@@ -252,10 +287,35 @@ def construir_dia(entrada: dict) -> dict:
         nuevas.append(_fila_apuesta({"id": j["id"], "tipo": k, "fecha": fecha, "hora": j["patas"][0]["t"],
                                      "partido": f"{k.capitalize()}: {nombre}", "seleccion": nombre,
                                      "piernas": [{"id": p["id"], "sel": p["sel"], "partido": p["partido"],
-                                                  "t": p["t"], "o": p["o"]} for p in j["patas"]],
+                                                  "t": p["t"], "o": p["o"], "mercado": p.get("mercado"),
+                                                  "lado": p.get("lado"), "linea": p.get("linea"),
+                                                  **({"equipo": p["equipo"]} if p.get("equipo") else {})}
+                                                 for p in j["patas"]],
                                      "cuotaRef": cref, "p": j["P"], "ev": j["ev"], "stake": j["stake"],
                                      **({"retiro": j["retiro"]} if j.get("retiro") is not None else {})},
                                     creado + 10 + len(nuevas)))
+
+    # Registro de TODOS los picks con cuota (usados o no): se liquidan igual y miden el modelo
+    usados_ids = set(usados)
+    for n, c in enumerate([c for c in evaluados if c.get("p") is not None], 1):
+        pid = f"{fecha}-p{n}"
+        nuevas.append(_fila_apuesta({"id": pid, "tipo": "pick", "seguimiento": True, "simulada": False,
+                                     "fecha": fecha, "hora": c["t"], "partido": f"{c['h']} vs {c['a']}",
+                                     "seleccion": c["sel"], "liga": c["lg"], "mercado": c.get("mercado"),
+                                     "lado": c.get("lado"), "linea": c.get("linea"), "cuotaRef": c["o"],
+                                     "bk": c.get("bk"), "p": c["p"], "mk": c.get("mk"), "sa": c.get("sa"),
+                                     "ev": c["ev"], "stake": 0, "usado": c.get("id") in usados_ids,
+                                     "descartado": c.get("descartado"), "motivo": c.get("motivo"),
+                                     "piernas": [{"sel": c["sel"], "partido": f"{c['h']} vs {c['a']}", "t": c["t"],
+                                                  "o": c["o"], "mercado": c.get("mercado"), "lado": c.get("lado"),
+                                                  "linea": c.get("linea"),
+                                                  **({"equipo": c["equipo"]} if c.get("equipo") else {})}]},
+                                    creado + 100 + n))
+
+    # Por qué se eligió cada pierna de las jugadas multi
+    for k in ("escalera", "super", "combinada"):
+        if jug.get(k):
+            jug[k]["detalle"] = detalle_jugada(jug[k], validos)
 
     # Bancas, semáforo y estadísticas
     ini_sis = banca_cfg.get("inicial", 90000)
@@ -316,6 +376,13 @@ def construir_dia(entrada: dict) -> dict:
             dia["estadisticas"][k]["curva"] = cur[:: max(1, len(cur) // 120)] + [cur[-1]]
 
     dia["porQue"] = {k: JUS.por_que_jugada(k, jug.get(k)) for k in ("escalera", "combinada", "super", "progresion")}
+    dia["rendimientoPicks"] = rend
+    for m in sorted(bloqueados):
+        avisos.append(f"Mercado {MK.NOMBRES.get(m, m)} fuera de la escalera: en el registro acierta bastante menos "
+                      "de lo que el modelo esperaba.")
+    racha_esc = EST.racha_escaleras(filas_previas)
+    if racha_esc >= 3:
+        avisos.append(f"{racha_esc} escaleras perdidas seguidas: considera bajar el fondo a la mitad o pausar un día.")
     dia["misApuestas"] = [
         {k: f.get(k) for k in ("id", "fecha", "hora", "partido", "seleccion", "mercado", "lado", "linea", "piernas",
                                "cuotaReal", "stakeReal", "resultado", "marcador", "netoReal", "cupon", "tipo")}
@@ -400,6 +467,8 @@ def resultado_pierna(p: dict, valor) -> str:
     m = re.match(r"\s*(\d+)\s*[-–:]\s*(\d+)", str(marcador))
     if not m:
         return "pendiente"
+    if p.get("equipo") is not None:
+        extras = {**(extras or {}), "equipo": p["equipo"]}
     return MK.resultado(p["mercado"], p.get("lado"), p.get("linea"), int(m.group(1)), int(m.group(2)), extras)
 
 

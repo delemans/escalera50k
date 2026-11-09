@@ -37,6 +37,7 @@ class Reglas:
     super_p: float = 0.65              # cada pierna con p ≥ 65 %
     super_ev_pierna: float = -0.03     # piernas casi justas o con valor
     max_busqueda: int = 14            # candidatos máx. para combinatoria
+    mercados_bloqueados: set = field(default_factory=set)   # mercados con mal récord en el registro de picks
     stakes: dict = field(default_factory=lambda: {
         "sencilla": 3000, "escalera": 5000, "progresion": 5000, "combinada": 3000, "super": 1500})
 
@@ -129,7 +130,8 @@ def escalera(cands: list[dict], r: Reglas) -> tuple[dict | None, str | None]:
     """Escalera para crecer la banca: hasta 5 peldaños con p ≥ 60 % y ≥ 2 h entre partidos.
     Todos los días sale al menos un peldaño si existe algún pick de 60 %: si con los filtros normales
     no hay, se abre el rango de cuota y se quita el filtro de EV (con aviso)."""
-    base = [c for c in cands if not c.get("alerta") and c["p"] >= r.escalera_p]
+    base = [c for c in cands if not c.get("alerta") and c["p"] >= r.escalera_p
+            and c.get("mercado", "1X2") not in r.mercados_bloqueados]
     estricto = [c for c in base if c["ev"] >= r.escalera_ev_min
                 and r.escalera_cuota[0] <= c["o"] <= r.escalera_cuota[1]]
     aviso = None

@@ -168,3 +168,44 @@ def semaforo(filas: list[dict], dias: int = 7, hoy: str | None = None) -> dict:
     t = (f"Sistema {'+' if roi >= 0 else '−'}{roi_txt} % en {dias} días; "
          f"{a} de {len(fs)} aciertos ({a / len(fs) * 100:.0f} %, esperado {esp / len(fs) * 100:.0f} %).")
     return {"c": c, "t": t}
+
+
+def rendimiento_picks(filas: list[dict], n_min_bloqueo: int = 30, margen_bloqueo: float = 0.08) -> dict:
+    """Récord de TODOS los picks registrados (tipo "pick"), usados o no: ¿el modelo acierta lo que promete?
+    Por mercado y por tramo de probabilidad: n, aciertos, % real vs % esperado y ROI a cuota de referencia
+    (1 unidad plana). Un mercado con ≥ n_min_bloqueo picks que acierta ≥ 8 pts menos de lo esperado
+    se marca "bloqueado" y sale de la escalera hasta que se recupere."""
+    fs = [f for f in filas if f.get("tipo") == "pick" and f.get("resultado") in ("ganado", "perdido")]
+    def _agrega(grupo):
+        n = len(grupo)
+        if not n:
+            return None
+        a = sum(1 for f in grupo if f["resultado"] == "ganado")
+        esp = sum(f.get("p") or 0 for f in grupo)
+        roi = sum(((f.get("cuotaRef") or 1) - 1) if f["resultado"] == "ganado" else -1 for f in grupo) / n
+        return {"n": n, "aciertos": a, "real": round(a / n, 4), "esperado": round(esp / n, 4),
+                "roi": round(roi, 4), "positivo": roi > 0}
+    por_m, por_t = {}, {}
+    for f in fs:
+        por_m.setdefault(f.get("mercado") or "1X2", []).append(f)
+        p = f.get("p") or 0
+        t = "80 %+" if p >= .8 else "70–80 %" if p >= .7 else "60–70 %" if p >= .6 else "<60 %"
+        por_t.setdefault(t, []).append(f)
+    pm = {m: _agrega(g) for m, g in por_m.items()}
+    for d in pm.values():
+        d["bloqueado"] = d["n"] >= n_min_bloqueo and d["real"] < d["esperado"] - margen_bloqueo
+    return {"total": _agrega(fs) or {"n": 0}, "porMercado": pm,
+            "porTramo": {t: _agrega(g) for t, g in sorted(por_t.items())},
+            "usados": _agrega([f for f in fs if f.get("usado")]) or {"n": 0}}
+
+
+def racha_escaleras(filas: list[dict]) -> int:
+    """Escaleras perdidas seguidas (las más recientes)."""
+    esc = sorted([f for f in filas if f.get("tipo") == "escalera" and f.get("resultado") in ("ganado", "perdido")],
+                 key=lambda f: (f.get("fecha", ""), f.get("id", "")))
+    n = 0
+    for f in reversed(esc):
+        if f["resultado"] != "perdido" or (f.get("neto") or 0) == 0:   # neto 0 = base a salvo: no es pérdida
+            break
+        n += 1
+    return n

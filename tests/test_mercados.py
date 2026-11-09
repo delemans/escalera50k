@@ -179,3 +179,54 @@ def test_partido_no_verificado_se_descarta():
     assert A.evaluar({**base, "verificado": False})["descartado"]
     assert "no confirmado" in A.evaluar(base, exigir_verificado=True)["motivo"]
     assert not A.evaluar({**base, "verificado": True}, exigir_verificado=True)["descartado"]
+
+
+def test_registro_de_picks_y_rendimiento():
+    from escalera.nucleo import estadisticas as EST
+    filas = [{"tipo": "pick", "mercado": "DC", "p": 0.8, "cuotaRef": 1.25, "resultado": "ganado", "usado": True}] * 24 + \
+            [{"tipo": "pick", "mercado": "DC", "p": 0.8, "cuotaRef": 1.25, "resultado": "perdido"}] * 6 + \
+            [{"tipo": "pick", "mercado": "BTTS", "p": 0.65, "cuotaRef": 1.6, "resultado": "ganado"}] * 12 + \
+            [{"tipo": "pick", "mercado": "BTTS", "p": 0.65, "cuotaRef": 1.6, "resultado": "perdido"}] * 18
+    r = EST.rendimiento_picks(filas)
+    assert r["total"]["n"] == 60
+    assert r["porMercado"]["DC"]["real"] == 0.8 and not r["porMercado"]["DC"]["bloqueado"]
+    assert r["porMercado"]["BTTS"]["bloqueado"]                 # 40 % real vs 65 % esperado
+    assert r["usados"]["n"] == 24
+    from escalera.nucleo import jugadas as J
+    c = {**_c("A", "10:00", 0.7, 1.4), "mercado": "BTTS"}
+    j, _ = J.escalera([c], J.Reglas(mercados_bloqueados={"BTTS"}))
+    assert j is None
+
+
+def test_racha_escaleras():
+    from escalera.nucleo import estadisticas as EST
+    f = lambda d, r, n: {"tipo": "escalera", "fecha": d, "id": d, "resultado": r, "neto": n}
+    assert EST.racha_escaleras([f("2026-11-01", "ganado", 900), f("2026-11-02", "perdido", -5000),
+                                f("2026-11-03", "perdido", -5000), f("2026-11-04", "perdido", -5000)]) == 3
+    assert EST.racha_escaleras([f("2026-11-03", "perdido", -5000), f("2026-11-04", "perdido", 0)]) == 0
+
+
+def test_mercado_goles_de_equipo():
+    assert MK.resultado("EQUIPO", "over", 0.5, 1, 0, {"equipo": "1"}) == "ganado"
+    assert MK.resultado("EQUIPO", "over", 0.5, 1, 0, {"equipo": "2"}) == "perdido"
+    assert MK.describir({"mercado": "EQUIPO", "equipo": "1", "lado": "over", "linea": 0.5, "h": "Bayern", "a": "X"}) \
+        == "Bayern: más de 0,5 goles"
+    assert A.resultado_pierna({"mercado": "EQUIPO", "equipo": "2", "lado": "under", "linea": 1.5,
+                               "sel": "x", "partido": "A vs B"}, "3-1") == "ganado"
+
+
+def test_analisis_registra_todos_los_picks_y_detalle():
+    import json
+    from pathlib import Path
+    raiz = Path(__file__).resolve().parent.parent
+    e = json.loads((raiz / "ejemplos/entrada_ejemplo.json").read_text())
+    e["statarea_csv"] = (raiz / "ejemplos/statarea_ejemplo.csv").read_text()
+    out = A.construir_dia(e)
+    picks = [f for f in out["apuestasNuevas"] if f["tipo"] == "pick"]
+    assert len(picks) == sum(1 for c in e["candidatos"]) and all(f["stake"] == 0 and not f["simulada"] for f in picks)
+    assert all(f["piernas"][0]["mercado"] for f in picks)
+    assert "rendimientoPicks" in out["dia"]
+    for k in ("escalera", "super", "combinada"):
+        j = out["dia"]["jugadas"].get(k)
+        if j:
+            assert len(j["detalle"]) == len(j["patas"]) and j["detalle"][0]["razones"]

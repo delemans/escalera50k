@@ -235,6 +235,9 @@ def _cuerpo_escalera(dia, item):
                 " (todo lo cobrado)" if n > retiro + 1 else "")
         out += [f"<b>{n}.</b> {e(x['t'])} · {e(x['partido'])}",
                 f"    ▸ {e(x['sel'])} @ {cuota(x['o'])} · apuestas <b>{monto}</b>{nota}"]
+        det = next((d for d in (j.get("detalle") or []) if d.get("id") == x.get("id")), None)
+        if det and det.get("razones"):
+            out.append(f"    💡 <i>{e(det['razones'][0])}</i>")
     if not item["monto"]:
         out.append("<i>Montos de la simulación del sistema (no es dinero real hoy).</i>")
     out += ["", f"🏁 Si completa: <b>{pesos(j['final'] * factor)}</b> · prob. {pct(j['P'], dec=1)}",

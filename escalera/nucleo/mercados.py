@@ -8,6 +8,7 @@ Mercados soportados (campo "mercado" del candidato):
   DC         doble oportunidad, lado "1X" | "12" | "X2" (se deriva de casas1x2)
   GOLES      más/menos goles, linea 1.5/2.5/3.5…, lado "over" | "under"   casas: [over, under]
   BTTS       ambos marcan, lado "si" | "no"            casas: [si, no]
+  EQUIPO     goles de un equipo, "equipo" "1" | "2", linea 0.5/1.5…, lado "over" | "under"   casas: [over, under]
   TARJETAS   más/menos tarjetas, linea, lado "over" | "under"
   CORNERS    más/menos tiros de esquina, linea, lado "over" | "under"
 
@@ -26,6 +27,7 @@ from . import probabilidad as PR
 
 AFILADAS = ("pinnacle", "betfair", "smarkets", "matchbook", "sbobet", "circa")
 NOMBRES = {"1X2": "Resultado", "DNB": "Empate no apuesta", "DC": "Doble oportunidad", "GOLES": "Goles",
+           "EQUIPO": "Goles de un equipo",
            "BTTS": "Ambos marcan", "TARJETAS": "Tarjetas", "CORNERS": "Córners"}
 LADOS2 = {"over": 0, "under": 1, "si": 0, "no": 1}
 
@@ -145,6 +147,9 @@ def describir(c: dict) -> str:
         return f"{'Más' if lado == 'over' else 'Menos'} de {ln} goles"
     if m == "BTTS":
         return "Ambos marcan: " + ("sí" if lado == "si" else "no")
+    if m == "EQUIPO":
+        eqn = c.get("h") if str(c.get("equipo", "1")) == "1" else c.get("a")
+        return f"{eqn}: {'más' if lado == 'over' else 'menos'} de {ln} goles"
     if m == "TARJETAS":
         return f"{'Más' if lado == 'over' else 'Menos'} de {ln} tarjetas"
     if m == "CORNERS":
@@ -169,6 +174,12 @@ def resultado(m: str, lado: str, linea, gl: int, gv: int, extras: dict | None = 
     if m == "DC":
         real = "1" if gl > gv else "2" if gv > gl else "X"
         return "ganado" if real in lado else "perdido"
+    if m == "EQUIPO":
+        total = gl if str(extras.get("equipo", "1")) == "1" else gv
+        linea = float(linea)
+        if total == linea:
+            return "nulo"
+        return "ganado" if (total > linea) == (lado == "over") else "perdido"
     if m in ("GOLES", "TARJETAS", "CORNERS"):
         total = gl + gv if m == "GOLES" else extras.get(m.lower())
         if total is None:
