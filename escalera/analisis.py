@@ -12,6 +12,7 @@ de que un modelo de lenguaje haga bien las cuentas.
 """
 from __future__ import annotations
 
+import math
 import re
 
 from .nucleo import estadisticas as EST
@@ -197,7 +198,7 @@ def construir_dia(entrada: dict) -> dict:
         if not j:
             continue
         if k == "escalera":
-            cref = round(j["patas"][0]["o"] * j["patas"][1]["o"] * j["patas"][2]["o"], 3)
+            cref = round(math.prod(p["o"] for p in j["patas"]), 3)
         elif k == "progresion":
             cref = j["patas"][0]["o"]
         else:
@@ -207,7 +208,8 @@ def construir_dia(entrada: dict) -> dict:
                                      "partido": f"{k.capitalize()}: {nombre}", "seleccion": nombre,
                                      "piernas": [{"id": p["id"], "sel": p["sel"], "partido": p["partido"],
                                                   "t": p["t"], "o": p["o"]} for p in j["patas"]],
-                                     "cuotaRef": cref, "p": j["P"], "ev": j["ev"], "stake": j["stake"]},
+                                     "cuotaRef": cref, "p": j["P"], "ev": j["ev"], "stake": j["stake"],
+                                     **({"retiro": j["retiro"]} if j.get("retiro") is not None else {})},
                                     creado + 10 + len(nuevas)))
 
     # Bancas, semáforo y estadísticas
@@ -257,7 +259,7 @@ def construir_dia(entrada: dict) -> dict:
         else:
             j = jug[i.tipo] if i.tipo in jug else None
             if j:
-                sim_in.append({"tipo": i.tipo, "monto": i.monto,
+                sim_in.append({"tipo": i.tipo, "monto": i.monto, "retiro": j.get("retiro", 2),
                                "patas": [{"id": p["id"], "o": p["o"]} for p in j["patas"]]})
     dia["simulacion"] = SIM.dia(sim_in, probs) if sim_in else {"n": 0}
     dia["estadisticas"] = {"sistema": EST.resumen(filas_previas, ini_sis),

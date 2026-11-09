@@ -25,8 +25,8 @@ from .sync import ahora
 
 COLOR = {"APOSTAR": "#1f9d55", "VIGILAR": "#c99a06", "NO": "#8a8f98"}
 TXT = {"APOSTAR": "APOSTAR", "VIGILAR": "VIGILAR", "NO": "NO APOSTAR"}
-NOMBRE = {"sencilla": "Individual", "escalera": "Escalera 3 peldaños", "combinada": "Combinada de valor",
-          "super": "Soñadora 100+", "progresion": "Escalera de crecimiento"}
+NOMBRE = {"sencilla": "Individual", "escalera": "Escalera de 70 %", "combinada": "Combinada de valor",
+          "super": "Soñadora 5–8", "progresion": "Escalera de crecimiento"}
 ICONO = {"sencilla": "🎯", "escalera": "🪜", "combinada": "🔗", "super": "🌙", "progresion": "📈"}
 
 

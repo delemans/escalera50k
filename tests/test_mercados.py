@@ -75,12 +75,38 @@ def _c(h, t, p, o):
     return {"id": h, "h": h, "a": h + " B", "lg": "L", "t": t, "sel": f"Gana {h}", "p": p, "o": o, "ev": p * o - 1, "alerta": False}
 
 
-def test_sonadora_cuota_100_con_valor():
+def test_sonadora_realista_cuota_5_a_8():
     from escalera.nucleo import jugadas as J
-    cands = [_c(f"E{i}", f"{8 + i:02d}:00", 0.55, 1.95) for i in range(8)] + [_c("Malo", "20:00", 0.30, 2.5)]
+    cands = [_c(f"E{i}", f"{8 + i:02d}:00", 0.70, 1.45) for i in range(6)] + [_c("Flojo", "20:00", 0.55, 1.90)]
     j = J.super_(cands, J.Reglas())
-    assert j and j["cuota"] >= 100 and all(x["sel"] != "Gana Malo" for x in j["patas"])
-    assert J.super_([_c("A", "08:00", .5, 1.9)], J.Reglas()) is None
+    assert j and 5.0 <= j["cuota"] <= 8.0 and 4 <= len(j["patas"]) <= 5
+    assert all(x["sel"] != "Gana Flojo" for x in j["patas"])          # p < 65 % no entra
+    assert all(p >= 0.65 for p in j["probs"])
+    assert J.super_([_c(f"B{i}", f"{8 + i:02d}:00", 0.55, 1.95) for i in range(6)], J.Reglas()) is None
+
+
+def test_escalera_cinco_peldanos_70():
+    from escalera.nucleo import jugadas as J
+    cands = [_c(f"E{i}", f"{8 + 2 * i:02d}:00", 0.72, 1.40) for i in range(6)] + [_c("Medio", "09:00", 0.60, 1.45)]
+    j, aviso = J.escalera(cands, J.Reglas(stakes={**J.Reglas().stakes, "escalera": 4000}))
+    assert j and aviso is None and len(j["patas"]) == 5 and j["peldanos"] == 5
+    assert all(x["sel"] != "Gana Medio" for x in j["patas"])
+    # 4000 → 5600 → 7840; se aparta la base 4000 → 3840 sigue → 5376 → 7526,4 → final 10536 + 4000
+    assert j["montos"] == [4000, 5600, 3840, 5376, 7526]
+    assert j["final"] == 14537
+    # con pocos picks de 70 % baja a 3 peldaños
+    j3, _ = J.escalera(cands[:3], J.Reglas())
+    assert j3 and len(j3["patas"]) == 3
+
+
+def test_liquidar_escalera_cinco():
+    from escalera.nucleo import liquidacion as L
+    fila = {"tipo": "escalera", "stake": 4000, "retiro": 2, "piernas": [{"o": 1.40}] * 5}
+    assert L.liquidar(fila, ["ganado", "perdido"] + ["pendiente"] * 3) == {"resultado": "perdido", "neto": -4000}
+    assert L.liquidar(fila, ["ganado", "ganado", "ganado", "perdido", "pendiente"])["neto"] == 0
+    assert L.liquidar(fila, ["ganado"] * 5) == {"resultado": "ganado", "neto": 10537}
+    vieja = {"tipo": "escalera", "stake": 5000, "piernas": [{"o": 1.4}, {"o": 1.4}, {"o": 1.3}]}   # filas de 3 sin "retiro"
+    assert L.liquidar(vieja, ["ganado"] * 3)["neto"] == round((5000 * 1.4 * 1.4 - 5000) * 1.3)
 
 
 def test_combinada_solo_con_valor():

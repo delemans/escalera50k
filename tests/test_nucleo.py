@@ -83,7 +83,7 @@ def _cand(h, t, p, o, lg="L1"):
 
 def test_armar_jugadas():
     cands = [_cand("A", "08:00", .74, 1.40, "L1"), _cand("B", "10:30", .70, 1.45, "L2"),
-             _cand("C", "13:00", .68, 1.48, "L3"), _cand("D", "15:00", .60, 1.75, "L1"),
+             _cand("C", "13:00", .71, 1.48, "L3"), _cand("D", "15:00", .60, 1.75, "L1"),
              _cand("E", "15:00", .55, 1.95, "L4"), _cand("F", "17:00", .62, 1.70, "L5")]
     jug, avisos = J.armar(cands, "2026-11-07", {"activo": True, "reto": 1, "paso": 1, "saldo": 5000,
                                                 "base": 5000, "meta": 50000})
@@ -92,7 +92,7 @@ def test_armar_jugadas():
     assert jug["progresion"]["patas"][0]["sel"] == "Gana A"
     c = jug["combinada"]
     assert c is None or not c["valor"] or (2.0 <= c["cuota"] <= 4.5 and c["ev"] >= 0.02)
-    assert jug["super"] is None or jug["super"]["cuota"] >= 100
+    assert jug["super"] is None or 5.0 <= jug["super"]["cuota"] <= 8.0
     assert all(a.startswith("Hoy no hay") for a in avisos)
 
 
