@@ -72,3 +72,25 @@ def test_escaneo_pedido_y_atendido(monkeypatch):
     assert db.get("escaneo")["pedido"] and db.get("escaneo")["atendido"] is None
     assert "Ya hay" in app.pedir_escaneo()                       # no duplica
     assert len(app.firma_escaneo()) == 16
+
+
+def test_escaneo_inmediato_con_disparador(monkeypatch):
+    from escalera.bot import app
+    db.put("escaneo", None)
+    llamadas = []
+
+    class R:
+        status_code = 200
+        def json(self):
+            return {"type": "routine_fire", "claude_code_session_url": "https://claude.ai/code/x"}
+
+    import requests
+    monkeypatch.setattr(config, "RUTINA_URL", "https://api.anthropic.com/v1/claude_code/routines/r/fire")
+    monkeypatch.setattr(config, "RUTINA_TOKEN", "tok")
+    monkeypatch.setattr(requests, "post", lambda url, **kw: llamadas.append((url, kw)) or R())
+    txt = app.pedir_escaneo()
+    assert "en marcha" in txt and llamadas
+    assert llamadas[0][1]["headers"]["Authorization"] == "Bearer tok"
+    assert "--desde" in llamadas[0][1]["json"]["text"]
+    assert db.get("escaneo")["atendido"] and db.get("escaneo")["inmediato"]
+    assert "Ya lancé" in app.pedir_escaneo()                    # no repite en 20 min

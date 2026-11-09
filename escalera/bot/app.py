@@ -51,19 +51,59 @@ def firma_escaneo() -> str:
     return hashlib.sha256(("escaneo:" + config.TOKEN_BOT).encode()).hexdigest()[:16]
 
 
+def disparar_rutina(texto: str) -> tuple[bool, str]:
+    """Lanza YA la tarea de Claude por su disparador API. Devuelve (ok, url de la sesión o error)."""
+    import requests
+    if not (config.RUTINA_URL and config.RUTINA_TOKEN):
+        return False, "sin disparador configurado"
+    try:
+        r = requests.post(config.RUTINA_URL, json={"text": texto}, timeout=30, headers={
+            "Authorization": f"Bearer {config.RUTINA_TOKEN}",
+            "anthropic-beta": "experimental-cc-routine-2026-04-01",
+            "anthropic-version": "2023-06-01", "Content-Type": "application/json"})
+    except requests.RequestException as ex:
+        return False, str(ex)[:120]
+    if r.status_code >= 300:
+        return False, f"HTTP {r.status_code}"
+    try:
+        return True, r.json().get("claude_code_session_url", "")
+    except ValueError:
+        return True, ""
+
+
 def pedir_escaneo() -> str:
-    """/escanear: deja el pedido marcado; la tarea vigía de Claude lo lanza en menos de 1 hora."""
+    """/escanear: con disparador API arranca de inmediato; si no, deja el pedido para la vigía (cada hora)."""
+    import datetime as dt
     ahora = sync.ahora()
     previo = db.get("escaneo") or {}
     if previo.get("pedido") and not previo.get("atendido"):
         return ("⏳ Ya hay un escaneo pedido (" + previo["pedido"][11:16] + "). Arranca en menos de 1 hora "
                 "y te llega la notificación cuando esté.")
+    if previo.get("atendido") and previo.get("inmediato"):
+        try:
+            hace = (ahora - dt.datetime.fromisoformat(previo["atendido"])).total_seconds() / 60
+        except (TypeError, ValueError):
+            hace = 99
+        if hace < 20:
+            return f"⏳ Ya lancé un escaneo hace {int(hace)} min. Te llega la notificación al terminar (10–20 min)."
+    desde = (ahora + dt.timedelta(minutes=30)).strftime("%H:%M")
+    texto = (f"ESCANEO MANUAL pedido desde Telegram (/escanear) a las {ahora:%H:%M}. Haz la revisión completa de hoy, "
+             f"pero usa solo partidos que empiecen desde las {desde} (Bogotá): corre candidatos con --desde {desde} y "
+             "verifica cada partido en Flashscore. Si quedan pocas franjas, arma la mejor escalera posible con "
+             "partidos reales de hoy y dilo en la notificación.")
+    ok, info = disparar_rutina(texto)
+    marca = ahora.isoformat(timespec="minutes")
+    if ok:
+        db.put("escaneo", {"pedido": marca, "atendido": marca, "inmediato": True, "sesion": info})
+        return ("🔎 <b>Escaneo en marcha</b>\nArrancó ahora mismo: en 10–20 minutos te llega la notificación y el día "
+                f"nuevo aquí. Solo entran partidos desde las {desde}.")
+    db.put("escaneo", {"pedido": marca, "atendido": None})
+    motivo = "" if info == "sin disparador configurado" else f" (el disparo inmediato falló: {info})"
     if not (7 <= ahora.hour < 20):
         nota = "La vigía revisa de 7 a. m. a 8 p. m.: se lanzará en la primera revisión de mañana."
     else:
         nota = "La vigía revisa cada hora: arranca en menos de 1 hora y tarda 10–20 minutos."
-    db.put("escaneo", {"pedido": ahora.isoformat(timespec="minutes"), "atendido": None})
-    return "🔎 <b>Escaneo pedido</b>\n" + nota + "\nSolo entran partidos que empiecen después de que arranque."
+    return "🔎 <b>Escaneo pedido</b>" + motivo + "\n" + nota
 
 
 def observadores() -> dict:

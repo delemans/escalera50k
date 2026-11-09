@@ -31,3 +31,7 @@ services:
         sync: false
       - key: CANAL_DATOS
         sync: false
+      - key: RUTINA_URL        # /escanear inmediato: Fire URL del disparador API de "picks diarios"
+        sync: false
+      - key: RUTINA_TOKEN      # token de ese disparador (secreto)
+        sync: false
