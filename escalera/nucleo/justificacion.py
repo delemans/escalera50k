@@ -93,7 +93,13 @@ def por_que_jugada(tipo: str, j: dict) -> list[str]:
     if tipo == "escalera":
         n = len(j.get("patas", []))
         r = j.get("retiro", 2)
-        return [f"{n} peldaños con p ≥ 70 % y al menos 2 h entre partidos, para crecer la banca.",
+        pmin = min(j.get("probs") or [P])
+        intro = (f"{n} peldaño{'s' if n != 1 else ''} con p ≥ {_pct(pmin, 0)} y al menos 2 h entre partidos, para crecer la banca."
+                 if not j.get("respaldo") else
+                 f"Día flojo: {n} peldaño{'s' if n != 1 else ''} (p ≥ {_pct(pmin, 0)}), los más probables aunque no pasen todos los filtros.")
+        if n < 3:
+            return [intro, f"Gana {_pct(P)} de las veces. Los días flojos salen menos peldaños, pero siempre hay al menos uno."]
+        return [intro,
                 f"Peldaños 1–{r}: todo lo cobrado pasa al siguiente. Antes del peldaño {r + 1} se aparta la base "
                 f"(queda a salvo {_pct(j.get('Pbase') or 0)} de las veces) y se sigue solo con la ganancia.",
                 f"Completa {_pct(P)} de las veces."]

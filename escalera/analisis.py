@@ -216,7 +216,8 @@ def construir_dia(entrada: dict) -> dict:
     ini_sis = banca_cfg.get("inicial", 90000)
     ini_real = banca_cfg.get("inicialReal", ini_sis)
     bancas = LIQ.bancas(filas_previas, ini_sis, ini_real)
-    pol = STK.PoliticaStake(banca=entrada.get("saldoReal") or bancas["real"], banca_inicial=ini_real)
+    pol = STK.PoliticaStake(banca=entrada.get("saldoReal") or bancas["real"], banca_inicial=ini_real,
+                            escalera_fija=float((banca_cfg.get("stakingReal") or {}).get("escaleraFija") or 0))
     dia = {"fecha": fecha, "fechaTexto": fecha_larga(fecha), "actualizado": entrada.get("actualizado", ""),
            "partidos": len(sa_filas), "erroresCsv": errores[:10], "validacion": validacion,
            "picks": picks, "jugadas": jug, "bancas": {**bancas, **entrada.get("variacion", {})},

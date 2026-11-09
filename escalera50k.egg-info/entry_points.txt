@@ -1,0 +1,3 @@
+[console_scripts]
+escalera = escalera.cli:main
+escalera-bot = escalera.bot.app:main

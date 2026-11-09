@@ -115,7 +115,7 @@ def _linea_liquidado(x):
 # ---------------------------------------------------------------------------
 # 2. Plan del día (qué hacer con cada una)
 # ---------------------------------------------------------------------------
-GRUPOS = [("sencilla", "🎯 INDIVIDUALES CON VALOR"), ("escalera", "🪜 ESCALERA DEL DÍA (picks de 70 %)"), ("combinada", "🔗 COMBINADA"),
+GRUPOS = [("sencilla", "🎯 INDIVIDUALES CON VALOR"), ("escalera", "🪜 ESCALERA DEL DÍA (picks de 60 %+)"), ("combinada", "🔗 COMBINADA"),
           ("super", "🌙 SOÑADORA (cuota 5–8)"), ("progresion", "📈 ESCALERA DE CRECIMIENTO")]
 NOMBRE_TIPO = {"sencilla": "Individual", "escalera": "Escalera", "combinada": "Combinada",
                "super": "Soñadora", "progresion": "Escalera de crecimiento"}
@@ -238,8 +238,9 @@ def _cuerpo_escalera(dia, item):
     if not item["monto"]:
         out.append("<i>Montos de la simulación del sistema (no es dinero real hoy).</i>")
     out += ["", f"🏁 Si completa: <b>{pesos(j['final'] * factor)}</b> · prob. {pct(j['P'], dec=1)}",
-            f"Peldaños 1–{retiro}: todo al siguiente · antes del {retiro + 1} apartas la base "
-            f"{pesos(j['stake'] * factor)} · si falla después, la base queda a salvo"]
+            (f"Peldaños 1–{retiro}: todo al siguiente · antes del {retiro + 1} apartas la base "
+             f"{pesos(j['stake'] * factor)} · si falla después, la base queda a salvo"
+             if len(j["patas"]) > retiro else "Cada peldaño que gana pasa todo al siguiente")]
     out += _por_que(dia, "escalera")
     return out
 
