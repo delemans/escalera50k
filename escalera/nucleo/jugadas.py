@@ -20,9 +20,9 @@ class Reglas:
     max_por_liga: int = 2
     max_misma_hora: int = 2
     escalera_p: float = 0.60           # crecer la banca: cada peldaño con p ≥ 60 % (se prefieren los más altos)
-    escalera_cuota: tuple = (1.25, 1.75)
+    escalera_cuota: tuple = (1.15, 1.75)    # incluye doble oportunidad y más de 1,5
     escalera_gap_h: float = 2.0
-    escalera_peldanos: tuple = (5, 4, 3, 2, 1)   # se intenta 5; si el día no da, menos: siempre sale al menos 1
+    escalera_peldanos: tuple = (5, 4, 3, 2, 1)   # objetivo: 5; solo baja si el día no da (con aviso)
     escalera_cuota_respaldo: tuple = (1.15, 2.10)   # día flojo: se abre cuota y EV (p ≥ 60 % se mantiene)
     escalera_retiro: int = 2           # antes del peldaño 3 se aparta la base y se sigue solo con la ganancia
     escalera_ev_min: float = -0.05     # no se aceptan peldaños muy mal pagados
@@ -141,6 +141,10 @@ def escalera(cands: list[dict], r: Reglas) -> tuple[dict | None, str | None]:
             aviso = "Escalera de día flojo: ningún pick pasó todos los filtros; es la más probable posible (revisa la cuota mínima)."
     if not mejor:
         return None, "Hoy no hay escalera: ningún pick llega al 60 %."
+    if len(mejor) < 5:
+        falta = (f"Escalera de {len(mejor)} peldaño{'s' if len(mejor) != 1 else ''}: hoy no hay 5 picks de 60 % "
+                 "con cuotas confirmadas y 2 h entre partidos.")
+        aviso = f"{aviso} {falta}" if aviso else falta
     S = r.stakes["escalera"]
     o = [c["o"] for c in mejor]
     p = [c["p"] for c in mejor]

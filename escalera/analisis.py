@@ -58,8 +58,8 @@ LIGAS = [
     ("international", ["champions league", "europa league", "conference league",
                        "libertadores", "sudamericana"]),
 ]
-EXCLUIR = ["2. bundesliga", "women", "femen", "u19", "u21", "u23", "reserve", "youth",
-           "challenge cup", "playoff", "regional", "amateur"]
+EXCLUIR = ["2. bundesliga", "women", "femen", "frauen", "liga f", "wsl", "feminin", "u17", "u18", "u19", "u20",
+           "u21", "u23", "reserve", "youth", "challenge cup", "playoff", "regional", "amateur", "friendl", "amistos"]
 
 
 def liga_principal(liga: str) -> bool:
@@ -74,14 +74,25 @@ def liga_principal(liga: str) -> bool:
 
 
 def candidatos_statarea(filas: list[dict], umbral: int = 50, hora_min: str = "07:30",
-                        maximo: int = 30) -> list[dict]:
-    """Qué buscar en el mercado, por partido y por mercado (1X2, DNB, goles, ambos marcan).
+                        maximo: int = 45, amplia: bool = True, por_franja: int = 4) -> list[dict]:
+    """Qué buscar en el mercado, por partido y por mercado.
+    • Mercados de valor: 1X2, DNB, goles 2,5 y ambos marcan.
+    • Mercados de ESCALERA (probabilidad alta): doble oportunidad (1X / X2), más de 1,5 y menos de 3,5 goles.
+    • amplia=True: también ligas secundarias (no juveniles, femeninas ni amistosos); las principales van primero.
+    • Se reparten por franjas de 2 h (hasta `por_franja` por franja) para que la escalera pueda tener
+      5 peldaños separados; luego se completa por probabilidad hasta `maximo`.
     La tarea busca cuotas solo de estos; tarjetas y córners los agrega ella si encuentra líneas."""
     out = []
     for f in filas:
-        if f["time"] < hora_min or not liga_principal(f["league"]):
+        principal = liga_principal(f["league"])
+        if f["time"] < hora_min:
             continue
-        base = {"h": f["home"], "a": f["away"], "lg": f["league"], "t": f["time"], "statarea": f}
+        if not principal and (not amplia or any(x in f["league"].lower() for x in EXCLUIR)):
+            continue
+        if "(w)" in (f["home"] + f["away"]).lower():
+            continue
+        base = {"h": f["home"], "a": f["away"], "lg": f["league"], "t": f["time"], "statarea": f,
+                "ligaPrincipal": principal}
         p1, px, p2 = f["p1"], f["pX"], f["p2"]
         for lado, prob in (("1", p1), ("2", p2)):
             if prob >= umbral:
@@ -89,10 +100,19 @@ def candidatos_statarea(filas: list[dict], umbral: int = 50, hora_min: str = "07
             cond = prob / max(1, p1 + p2)
             if 42 <= prob < umbral and cond >= 0.62:
                 out.append({**base, "mercado": "DNB", "lado": lado, "fuerza": cond * (1 - px / 100)})
+        # doble oportunidad del favorito (escalera)
+        if p1 >= p2 and p1 + px >= 72 and p1 < 70:
+            out.append({**base, "mercado": "DC", "lado": "1X", "fuerza": (p1 + px) / 100})
+        elif p2 > p1 and p2 + px >= 72 and p2 < 70:
+            out.append({**base, "mercado": "DC", "lado": "X2", "fuerza": (p2 + px) / 100})
         if f["o25"] >= 62:
             out.append({**base, "mercado": "GOLES", "linea": 2.5, "lado": "over", "fuerza": f["o25"] / 100})
         elif f["o25"] <= 38:
             out.append({**base, "mercado": "GOLES", "linea": 2.5, "lado": "under", "fuerza": 1 - f["o25"] / 100})
+        if f["o15"] >= 75 and f["o25"] < 62:
+            out.append({**base, "mercado": "GOLES", "linea": 1.5, "lado": "over", "fuerza": f["o15"] / 100})
+        if f["o35"] <= 28 and f["o25"] > 38:
+            out.append({**base, "mercado": "GOLES", "linea": 3.5, "lado": "under", "fuerza": 1 - f["o35"] / 100})
         if f["bts"] >= 62:
             out.append({**base, "mercado": "BTTS", "lado": "si", "fuerza": f["bts"] / 100})
         elif f["bts"] <= 38:
@@ -100,13 +120,37 @@ def candidatos_statarea(filas: list[dict], umbral: int = 50, hora_min: str = "07
     for c in out:
         c["sel"] = MK.describir(c)
         c["sa"] = MK.prob_statarea(c)
-    out.sort(key=lambda c: -c["fuerza"])
-    return out[:maximo]
+    clave = lambda c: -(c["fuerza"] + (0.05 if c["ligaPrincipal"] else 0))
+    out.sort(key=clave)
+    elegidos, por_f = [], {}
+    for c in out:                                   # 1.ª pasada: reparto por franjas de 2 h
+        fr = int(c["t"][:2]) // 2
+        if por_f.get(fr, 0) < por_franja:
+            elegidos.append(c)
+            por_f[fr] = por_f.get(fr, 0) + 1
+    for c in out:                                   # 2.ª pasada: completar por probabilidad
+        if len(elegidos) >= maximo:
+            break
+        if c not in elegidos:
+            elegidos.append(c)
+    elegidos = sorted(elegidos[:maximo], key=clave)
+    return elegidos
 
 
-def evaluar(c: dict) -> dict:
-    """c = candidato con "mercado", "lado", "linea", "casas" [{bk, o:[…]}] (+ casas1x2, noticias, alerta)."""
+def evaluar(c: dict, exigir_verificado: bool = False) -> dict:
+    """c = candidato con "mercado", "lado", "linea", "casas" [{bk, o:[…]}] (+ casas1x2, noticias, alerta).
+    "verificado": true = fecha y hora confirmadas en Flashscore/ESPN/Sofascore (hoy y sin empezar).
+    Si es false, o si se exige y falta, el candidato se descarta: solo entran partidos reales de hoy."""
     c = dict(c)
+    if c.get("verificado") is False or (exigir_verificado and c.get("verificado") is not True):
+        c.setdefault("mercado", "1X2")
+        c.setdefault("sel", MK.describir(c))
+        c.update(mk=None, p=None, ev=None, motivo="Partido no confirmado hoy (Flashscore/ESPN)", descartado=True,
+                 valor=False, confianza=1)
+        c["justificacion"] = {"aFavor": [], "enContra": ["No se pudo confirmar que el partido sea hoy y no haya empezado."],
+                              "confianza": 1, "etiqueta": "DESCARTADO", "resumen": "Partido no confirmado."}
+        c.pop("statarea", None)
+        return c
     c.setdefault("mercado", "1X2")
     c.setdefault("sel", MK.describir(c))
     try:
@@ -168,7 +212,8 @@ def construir_dia(entrada: dict) -> dict:
         VAL.ajustar_hora(sa_filas, int(entrada["ajuste_hora"]))
     validacion = VAL.validar(sa_filas)
 
-    evaluados = [evaluar(c) for c in entrada.get("candidatos", [])]
+    exigir = bool(entrada.get("exigir_verificado"))
+    evaluados = [evaluar(c, exigir) for c in entrada.get("candidatos", [])]
     validacion.append(VAL.favoritos_vs_mercado(evaluados))
     validos = [c for c in evaluados if not c["descartado"]]
 

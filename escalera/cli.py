@@ -1,7 +1,7 @@
 """
 CLI · comandos que usa la tarea programada (y tú, para probar)
 =============================================================
-  python -m escalera.cli candidatos statarea.csv [--ajuste -1]   → candidatos.json
+  python -m escalera.cli candidatos statarea.csv [--ajuste -1] [--desde 12:00] [--max 45]   → candidatos.json
   python -m escalera.cli analizar entrada.json  [--out salida.json]
   python -m escalera.cli liquidar entrada.json  [--out salida.json]
   python -m escalera.cli informe apuestas.json  [--inicial 90000] [--real]
@@ -43,6 +43,9 @@ def main(argv=None):
     c = sub.add_parser("candidatos")
     c.add_argument("csv")
     c.add_argument("--ajuste", type=int, default=0, help="horas a sumar a la hora de StatArea")
+    c.add_argument("--desde", default="07:30", help="solo partidos desde esta hora (Bogotá), p. ej. 12:00 en un escaneo manual")
+    c.add_argument("--max", type=int, default=45)
+    c.add_argument("--solo-principales", action="store_true")
     c.add_argument("--out")
     for nombre in ("analizar", "liquidar"):
         s = sub.add_parser(nombre)
@@ -73,7 +76,8 @@ def main(argv=None):
         if a.ajuste:
             VAL.ajustar_hora(filas, a.ajuste)
         _salida({"partidos": len(filas), "errores": errores,
-                 "validacion": VAL.validar(filas), "candidatos": A.candidatos_statarea(filas)}, a.out)
+                 "validacion": VAL.validar(filas), "candidatos": A.candidatos_statarea(
+                     filas, hora_min=a.desde, maximo=a.max, amplia=not a.solo_principales)}, a.out)
     elif a.cmd == "analizar":
         entrada = _leer(a.entrada)
         if entrada.get("statarea_csv", "").endswith(".csv"):

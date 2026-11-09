@@ -101,9 +101,13 @@ def test_escalera_cinco_peldanos_70():
 
 def test_escalera_sale_todos_los_dias():
     from escalera.nucleo import jugadas as J
-    # un solo pick de 60 %+ con buena cuota → escalera de 1 peldaño, sin aviso
+    # un solo pick de 60 %+ con buena cuota → escalera de 1 peldaño, con aviso de que faltan peldaños
     j, aviso = J.escalera([_c("A", "10:00", 0.62, 1.62), _c("B", "12:00", 0.50, 2.10)], J.Reglas())
-    assert j and len(j["patas"]) == 1 and j["patas"][0]["sel"] == "Gana A" and aviso is None
+    assert j and len(j["patas"]) == 1 and j["patas"][0]["sel"] == "Gana A" and "1 peldaño" in aviso
+    # con 5 picks bien espaciados (incluida doble oportunidad a 1,20) no hay aviso
+    cinco = [_c(f"E{i}", f"{7 + 3 * i:02d}:00", 0.80, 1.20) for i in range(5)]
+    j, aviso = J.escalera(cinco, J.Reglas())
+    assert j and len(j["patas"]) == 5 and aviso is None
     # día flojo: el único pick de 60 %+ está mal pagado → sale igual, marcado como respaldo
     j, aviso = J.escalera([_c("A", "10:00", 0.66, 1.30)], J.Reglas())
     assert j and j["respaldo"] and aviso and aviso.startswith("Escalera de día flojo")
@@ -149,3 +153,29 @@ def test_escalera_crecimiento_real_avanza():
     prog = {"reto": 1, "paso": 1, "saldo": 9000, "base": 9000, "meta": 50000, "historial": []}
     r = A.liquidar_filas([fila], {"Shakhtar Donetsk vs Sporting CP": {"marcador": "0-1", "tarjetas": 3}}, prog)
     assert r["filas"][0]["netoReal"] == 4860 and r["progresion"]["saldo"] == 13860 and r["progresion"]["paso"] == 2
+
+
+def test_candidatos_escalera_y_franjas():
+    filas = []
+    for i, h in enumerate(["07:30", "09:45", "12:00", "14:15", "16:30", "19:00"]):
+        filas.append({"league": "Bulgaria - Second Professional League", "time": h, "tip": "1",
+                      "home": f"L{i}", "away": f"V{i}", "p1": 55, "pX": 25, "p2": 20, "h1": 40, "hX": 40, "h2": 20,
+                      "o15": 80, "o25": 55, "o35": 30, "bts": 50, "ots": 50})
+    filas.append({"league": "U19 - Youth League", "time": "10:00", "tip": "1", "home": "J", "away": "K",
+                  "p1": 70, "pX": 20, "p2": 10, "h1": 50, "hX": 30, "h2": 20, "o15": 90, "o25": 70, "o35": 50,
+                  "bts": 60, "ots": 40})
+    cands = A.candidatos_statarea(filas)
+    assert {c["t"] for c in cands} == {"07:30", "09:45", "12:00", "14:15", "16:30", "19:00"}   # todas las franjas
+    assert any(c["mercado"] == "DC" and c["lado"] == "1X" for c in cands)
+    assert any(c["mercado"] == "GOLES" and c["linea"] == 1.5 for c in cands)
+    assert not any(c["h"] == "J" for c in cands)                                                # juveniles fuera
+    assert not A.candidatos_statarea(filas, amplia=False)                                         # solo principales
+    assert all(c["t"] >= "12:00" for c in A.candidatos_statarea(filas, hora_min="12:00"))
+
+
+def test_partido_no_verificado_se_descarta():
+    base = {"h": "A", "a": "B", "lg": "L", "t": "15:00", "mercado": "1X2", "lado": "1",
+            "casas": [{"bk": "Pinnacle", "o": [1.5, 4.0, 6.0]}, {"bk": "Bet365", "o": [1.5, 4.2, 6.5]}]}
+    assert A.evaluar({**base, "verificado": False})["descartado"]
+    assert "no confirmado" in A.evaluar(base, exigir_verificado=True)["motivo"]
+    assert not A.evaluar({**base, "verificado": True}, exigir_verificado=True)["descartado"]
