@@ -99,6 +99,28 @@ def test_escalera_cinco_peldanos_70():
     assert j3 and len(j3["patas"]) == 3
 
 
+def test_escalera_sale_todos_los_dias():
+    from escalera.nucleo import jugadas as J
+    # un solo pick de 60 %+ con buena cuota → escalera de 1 peldaño, sin aviso
+    j, aviso = J.escalera([_c("A", "10:00", 0.62, 1.62), _c("B", "12:00", 0.50, 2.10)], J.Reglas())
+    assert j and len(j["patas"]) == 1 and j["patas"][0]["sel"] == "Gana A" and aviso is None
+    # día flojo: el único pick de 60 %+ está mal pagado → sale igual, marcado como respaldo
+    j, aviso = J.escalera([_c("A", "10:00", 0.66, 1.30)], J.Reglas())
+    assert j and j["respaldo"] and aviso and aviso.startswith("Escalera de día flojo")
+    # sin ningún pick de 60 % no hay escalera
+    j, aviso = J.escalera([_c("A", "10:00", 0.55, 1.80)], J.Reglas())
+    assert j is None and "60 %" in aviso
+
+
+def test_escalera_fondo_fijo_fuera_del_tope():
+    from escalera.nucleo import staking as S
+    dia = {"picks": [], "jugadas": {"escalera": {"id": "e", "tipo": "escalera", "P": 0.4, "ev": -0.02, "stake": 5000,
+                                                 "patas": [{"id": "a", "o": 1.5, "t": "10:00"}, {"id": "b", "o": 1.6, "t": "13:00"}]}}}
+    pol = S.PoliticaStake(banca=20000, banca_inicial=20000, escalera_fija=5000)
+    i = [x for x in S.plan_del_dia(dia, pol) if x.tipo == "escalera"][0]
+    assert i.accion == "APOSTAR" and i.monto == 5000          # 25 % de la banca: no lo recorta el tope diario
+
+
 def test_liquidar_escalera_cinco():
     from escalera.nucleo import liquidacion as L
     fila = {"tipo": "escalera", "stake": 4000, "retiro": 2, "piernas": [{"o": 1.40}] * 5}

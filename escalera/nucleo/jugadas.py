@@ -19,10 +19,11 @@ class Reglas:
     sencilla_cuota: tuple = (1.30, 2.60)
     max_por_liga: int = 2
     max_misma_hora: int = 2
-    escalera_p: float = 0.70           # crecer la banca: cada peldaño con p ≥ 70 %
-    escalera_cuota: tuple = (1.25, 1.50)
+    escalera_p: float = 0.60           # crecer la banca: cada peldaño con p ≥ 60 % (se prefieren los más altos)
+    escalera_cuota: tuple = (1.25, 1.75)
     escalera_gap_h: float = 2.0
-    escalera_peldanos: tuple = (5, 4, 3)   # se intenta 5; si el día no da, 4 y luego 3
+    escalera_peldanos: tuple = (5, 4, 3, 2, 1)   # se intenta 5; si el día no da, menos: siempre sale al menos 1
+    escalera_cuota_respaldo: tuple = (1.15, 2.10)   # día flojo: se abre cuota y EV (p ≥ 60 % se mantiene)
     escalera_retiro: int = 2           # antes del peldaño 3 se aparta la base y se sigue solo con la ganancia
     escalera_ev_min: float = -0.05     # no se aceptan peldaños muy mal pagados
     progresion_cuota: tuple = (1.25, 1.60)
@@ -105,46 +106,48 @@ def ev_escalera(p: list[float], o: list[float], retiro: int = 2) -> float:
     return esperado / S - 1
 
 
-def escalera(cands: list[dict], r: Reglas) -> tuple[dict | None, str | None]:
-    """Escalera para crecer la banca: 5 peldaños (o 4, o 3) con p ≥ 70 % y ≥ 2 h entre partidos."""
-    pool = [c for c in cands if not c.get("alerta") and c["p"] >= r.escalera_p
-            and c["ev"] >= r.escalera_ev_min
-            and r.escalera_cuota[0] <= c["o"] <= r.escalera_cuota[1]]
-    pool = sorted(pool, key=lambda c: -c["p"])[: r.max_busqueda]
-    mejor, aviso = None, None
+def _mejor_escalera(pool: list[dict], r: Reglas):
     for n in r.escalera_peldanos:
-        mejor_P = -1
+        mejor, mejor_P = None, -1
         for combo in itertools.combinations(pool, n):
             if not _distintos(combo):
                 continue
             combo = sorted(combo, key=lambda c: c["t"])
-            g = min((_min(combo[i + 1]["t"]) - _min(combo[i]["t"])) / 60 for i in range(n - 1))
-            if g < r.escalera_gap_h:
-                continue
+            if n > 1:
+                g = min((_min(combo[i + 1]["t"]) - _min(combo[i]["t"])) / 60 for i in range(n - 1))
+                if g < r.escalera_gap_h:
+                    continue
             P = math.prod(c["p"] for c in combo)
             if P > mejor_P:
                 mejor, mejor_P = combo, P
         if mejor:
-            break
-    if not mejor:                        # ninguna con 2 h: la de 3 más espaciada, con aviso
-        mejor_g = -1e9
-        for trio in itertools.combinations(pool, 3):
-            if not _distintos(trio):
-                continue
-            trio = sorted(trio, key=lambda c: c["t"])
-            g = min((_min(trio[i + 1]["t"]) - _min(trio[i]["t"])) / 60 for i in range(2))
-            if g > mejor_g:
-                mejor, mejor_g = trio, g
-        if not mejor:
-            return None, None
-        aviso = "Escalera sin 2 h entre peldaños: es la más cercana posible."
+            return mejor
+    return None
+
+
+def escalera(cands: list[dict], r: Reglas) -> tuple[dict | None, str | None]:
+    """Escalera para crecer la banca: hasta 5 peldaños con p ≥ 60 % y ≥ 2 h entre partidos.
+    Todos los días sale al menos un peldaño si existe algún pick de 60 %: si con los filtros normales
+    no hay, se abre el rango de cuota y se quita el filtro de EV (con aviso)."""
+    base = [c for c in cands if not c.get("alerta") and c["p"] >= r.escalera_p]
+    estricto = [c for c in base if c["ev"] >= r.escalera_ev_min
+                and r.escalera_cuota[0] <= c["o"] <= r.escalera_cuota[1]]
+    aviso = None
+    mejor = _mejor_escalera(sorted(estricto, key=lambda c: -c["p"])[: r.max_busqueda], r)
+    if not mejor:
+        respaldo = [c for c in base if r.escalera_cuota_respaldo[0] <= c["o"] <= r.escalera_cuota_respaldo[1]]
+        mejor = _mejor_escalera(sorted(respaldo, key=lambda c: -c["p"])[: r.max_busqueda], r)
+        if mejor:
+            aviso = "Escalera de día flojo: ningún pick pasó todos los filtros; es la más probable posible (revisa la cuota mínima)."
+    if not mejor:
+        return None, "Hoy no hay escalera: ningún pick llega al 60 %."
     S = r.stakes["escalera"]
     o = [c["o"] for c in mejor]
     p = [c["p"] for c in mejor]
     m = montos_escalera(S, o, r.escalera_retiro)
     P = math.prod(p)
     return {"tipo": "escalera", "stake": S, "patas": [_pata(c) for c in mejor],
-            "peldanos": len(mejor), "retiro": r.escalera_retiro,
+            "peldanos": len(mejor), "retiro": r.escalera_retiro, "respaldo": bool(aviso),
             "P": round(P, 4), "Pbase": round(math.prod(p[: r.escalera_retiro]), 4),
             "ev": round(ev_escalera(p, o, r.escalera_retiro), 4), "final": round(m["final"]),
             "montos": [round(x) for x in m["montos"]], "probs": [round(x, 4) for x in p]}, aviso

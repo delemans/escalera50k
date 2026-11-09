@@ -43,6 +43,8 @@ class PoliticaStake:
     max_exposicion_partido: float = 2.5     # unidades que pueden depender de un mismo partido
     margen_valor: float = V.MARGEN_VALOR
     umbral_vigilar: float = -0.04
+    escalera_fija: float = 0               # > 0: la escalera usa este monto fijo (fondo aparte elegido por el usuario)
+    escalera_ev_min: float = -0.06         # con fondo fijo se apuesta si el EV no es peor que esto
 
     @property
     def freno(self) -> bool:
@@ -145,6 +147,7 @@ def plan_del_dia(dia: dict, pol: PoliticaStake) -> list[Instruccion]:
             continue
         acc = _accion(j["ev"], pol)
         razon = "Multi: todas las piernas deben ganar." if acc != "NO" else "EV negativo: solo simulación."
+        fija = clave == "escalera" and pol.escalera_fija > 0
         if clave == "super" and j["ev"] >= -0.10:
             acc = "APOSTAR"                                 # prueba diaria del sistema: siempre la mínima
             razon = ("Prueba diaria de la soñadora: solo la apuesta mínima. "
@@ -152,8 +155,15 @@ def plan_del_dia(dia: dict, pol: PoliticaStake) -> list[Instruccion]:
         if clave == "combinada" and j.get("valor") is False and acc == "NO":
             acc = "VIGILAR"
             razon = "Hoy no hay combinada con valor: esta es la mejor posible; solo si BetPlay paga la mínima."
+        if fija:
+            acc = "APOSTAR" if j["ev"] >= pol.escalera_ev_min else "VIGILAR"
+            razon = (f"Escalera con el fondo fijo que elegiste (${pol.escalera_fija:,.0f}".replace(",", ".")
+                     + "): va aparte, no cuenta en el tope diario."
+                     + ("" if acc == "APOSTAR" else " Hoy el EV es muy bajo: solo si BetPlay paga la mínima."))
         if acc != "APOSTAR":
             monto = 0
+        elif fija:
+            monto = pol.escalera_fija
         elif clave == "super":
             monto = pol.apuesta_minima                      # gasto fijo y mínimo
         else:
@@ -184,6 +194,8 @@ def plan_del_dia(dia: dict, pol: PoliticaStake) -> list[Instruccion]:
     for i in out:
         if i.tipo == "sencilla":
             patas_de[i.id] = [i.id]
+        elif i.tipo == "escalera" and pol.escalera_fija > 0:
+            continue                                        # fondo aparte: no cuenta en la exposición
         elif i.tipo in jug and jug[i.tipo] and i.tipo != "progresion":
             patas_de[i.id] = [x["id"] for x in jug[i.tipo]["patas"]]
     limite = pol.max_exposicion_partido * pol.unidad
@@ -203,11 +215,12 @@ def plan_del_dia(dia: dict, pol: PoliticaStake) -> list[Instruccion]:
                 break
 
     # Tope diario: reducir en proporción si se pasa
-    total = sum(i.monto for i in out if i.tipo != "progresion")
+    aparte = {"progresion"} | ({"escalera"} if pol.escalera_fija > 0 else set())
+    total = sum(i.monto for i in out if i.tipo not in aparte)
     if total > pol.tope_diario > 0:
         f = pol.tope_diario / total
         for i in out:
-            if i.monto and i.tipo != "progresion":
+            if i.monto and i.tipo not in aparte:
                 i.monto = pol.redondear(i.monto * f)
                 i.razon += " (ajustado al tope diario)"
     out.sort(key=lambda i: i.hora or "99")

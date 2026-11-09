@@ -88,7 +88,7 @@ def test_armar_jugadas():
     jug, avisos = J.armar(cands, "2026-11-07", {"activo": True, "reto": 1, "paso": 1, "saldo": 5000,
                                                 "base": 5000, "meta": 50000})
     assert len(jug["sencillas"]["ids"]) == 5
-    assert jug["escalera"] and [p["t"] for p in jug["escalera"]["patas"]] == ["08:00", "10:30", "13:00"]
+    assert jug["escalera"] and [p["t"] for p in jug["escalera"]["patas"]] == ["08:00", "10:30", "13:00", "15:00", "17:00"]
     assert jug["progresion"]["patas"][0]["sel"] == "Gana A"
     c = jug["combinada"]
     assert c is None or not c["valor"] or (2.0 <= c["cuota"] <= 4.5 and c["ev"] >= 0.02)
