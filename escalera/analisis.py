@@ -251,7 +251,7 @@ def construir_dia(entrada: dict) -> dict:
     stakes = banca_cfg.get("stakes") or JUG.Reglas().stakes
     rend = EST.rendimiento_picks(filas_previas)
     bloqueados = {m for m, d in rend["porMercado"].items() if d.get("bloqueado")}
-    reglas = JUG.Reglas(stakes=stakes, mercados_bloqueados=bloqueados)
+    reglas = JUG.reglas_desde_config(banca_cfg, stakes=stakes, mercados_bloqueados=bloqueados)
     jug, avisos = JUG.armar(validos, fecha, prog_cfg, reglas)
 
     usados = set(jug["sencillas"]["ids"])

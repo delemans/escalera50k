@@ -25,7 +25,7 @@ import uuid
 from .. import config
 from ..nucleo import formato as F
 from ..nucleo import staking as STK
-from . import alertas, canal, db, en_vivo, ia, panel, sync, voz, web
+from . import alertas, canal, charla, db, en_vivo, ia, panel, sync, voz, web
 from . import mensajes as M
 from . import telegram as tg
 
@@ -251,6 +251,9 @@ def cmd(texto: str, chat_id) -> bool:
         enviar_dia(dia)
     elif c == "/plan":
         tg.enviar(chat_id, M.plan(dia) or "Hoy no hay plan.")
+    elif c in ("/resultados", "/historial", "/comovoy"):
+        desde = (sync.ahora().date() - __import__("datetime").timedelta(days=7)).isoformat()
+        tg.enviar(chat_id, M.resultados(db.registro(desde), dia))
     elif c == "/invitar":
         u = (tg.llamar("getMe") or {}).get("username", "")
         tg.enviar(chat_id, "👁 <b>Invitar en modo lectura</b>\nMándale este enlace a la persona. Al abrirlo y tocar "
@@ -516,6 +519,12 @@ def conversar(chat_id, texto, imagen=None, fuente="texto"):
         tg.enviar(chat_id, f"⚠️ No pude procesar eso ahora ({type(ex).__name__}). Intenta en un minuto; "
                            "los botones siguen funcionando.")
         return
+    if respuesta and respuesta.startswith(("⚠️ La IA está saturada", "⚠️ No hay IA configurada")) and not imagen:
+        respuesta_html = charla.responder(texto, dia, db.registro(desde))   # respaldo: nunca deja sin respuesta
+        db.recordar("user", texto or "")
+        db.recordar("assistant", respuesta_html)
+        tg.enviar(chat_id, respuesta_html)
+        return
     db.recordar("user", ("[pantallazo] " if imagen else "") + (texto or ""))
     db.recordar("assistant", respuesta or "…")
     if respuesta:
@@ -684,7 +693,7 @@ def periodicas():
 
 
 COMANDOS = [("escanear", "Pedir un escaneo nuevo del día"), ("hoy", "Resumen y jugadas del día"), ("plan", "Qué hacer con cada jugada"), ("app", "Abrir la app en el celular"), ("invitar", "Invitar a alguien en modo lectura"), ("boletos", "Qué montar en BetPlay"),
-            ("informe", "Métricas e informe"), ("mis", "Tus apuestas abiertas"), ("escalera", "Tu escalera y el próximo peldaño"), ("cobro", "¿Cobrar ya? /cobro 45000"),
+            ("informe", "Métricas e informe"), ("resultados", "Lo que ya pasó, ordenado"), ("mis", "Tus apuestas abiertas"), ("escalera", "Tu escalera y el próximo peldaño"), ("cobro", "¿Cobrar ya? /cobro 45000"),
             ("tarjetas", "Tarjetas con botones"), ("banca", "Banca, unidad y tope"),
             ("saldo", "Reportar tu saldo de BetPlay"), ("stats", "Estadísticas"),
             ("riesgo", "Simulación del plan"), ("registro", "Lo registrado hoy"),

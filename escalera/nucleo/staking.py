@@ -175,6 +175,8 @@ def plan_del_dia(dia: dict, pol: PoliticaStake) -> list[Instruccion]:
         else:
             cref = j["cuota"]
         cmin = V.cuota_minima(j["P"], pol.margen_valor)
+        if clave == "escalera" and j.get("conSeguro") and j["ev"] > -1:
+            cmin = cref * (1 + pol.margen_valor) / (1 + j["ev"])   # con DNB: P es "no perder", no "ganar"
         if clave == "super":
             cmin = min(cmin, cref * 0.9)                     # soñadora: acepta hasta un 10 % menos que la referencia
         out.append(Instruccion(j["id"], clave, nombre, acc, monto, round(cref, 3), round(cmin, 3), j["P"], j["ev"],

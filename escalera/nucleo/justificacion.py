@@ -82,7 +82,55 @@ def justificar(c: dict) -> dict:
     etiqueta = ("VALOR ALTO" if (c.get("ev") or 0) >= 0.05 and conf >= 3 else
                 "VALOR" if (c.get("ev") or 0) >= 0.02 else "VIGILAR" if (c.get("ev") or 0) >= -0.04 else "NO")
     resumen = favor[0] if favor else (contra[0] if contra else "")
-    return {"aFavor": favor[:5], "enContra": contra[:4], "confianza": conf, "etiqueta": etiqueta, "resumen": resumen}
+    extra = analisis_extra(c)
+    return {"aFavor": favor[:5], "enContra": contra[:4], "confianza": conf, "etiqueta": etiqueta, "resumen": resumen,
+            **extra}
+
+
+COMO_PIERDE = {
+    "1X2": "si empatan o gana el rival",
+    "DNB": "solo si gana el rival (el empate devuelve)",
+    "DC": "solo si gana el equipo que no cubres",
+    "GOLES": {"over": "si el partido sale cerrado, con pocos goles", "under": "si se abre el partido y llueven goles"},
+    "BTTS": {"si": "si uno de los dos no marca", "no": "si marcan los dos"},
+    "EQUIPO": {"over": "si ese equipo no llega a la línea de goles", "under": "si ese equipo marca más de la cuenta"},
+    "TARJETAS": {"over": "si el partido sale limpio", "under": "si se calienta el partido"},
+    "CORNERS": {"over": "si hay pocos córners", "under": "si hay muchos córners"},
+}
+
+
+def analisis_extra(c: dict) -> dict:
+    """Escenarios (gana / devuelve / pierde), cuota justa, «pierde 1 de cada N»,
+    cómo se pierde según el mercado y un veredicto de una línea. Solo usa números ya calculados."""
+    p, o, push = c.get("p"), c.get("o"), c.get("p_push") or 0.0
+    if not p:
+        return {}
+    pierde = max(0.0, 1 - p - push)
+    m = c.get("mercado", "1X2")
+    cp = COMO_PIERDE.get(m, "si no se cumple la selección")
+    if isinstance(cp, dict):
+        cp = cp.get(str(c.get("lado")), "si no se cumple la selección")
+    justa = (1 - push) / p if p else None                  # cuota con EV 0 (con DNB descuenta el empate)
+    n = round(1 / pierde) if pierde > 0 else None
+    escenarios = [{"t": "gana", "p": round(p, 4)}]
+    if push:
+        escenarios.append({"t": "devuelve", "p": round(push, 4)})
+    escenarios.append({"t": "pierde", "p": round(pierde, 4)})
+    ev, omin = c.get("ev"), c.get("omin")
+    if ev is None or not o:
+        veredicto = "Sin cuota confiable: no apostar."
+    elif c.get("descartado") or c.get("motivo"):
+        veredicto = f"Descartado: {c.get('motivo') or 'no pasa los filtros'}."
+    elif ev >= 0.02:
+        veredicto = f"Apostar: a {_c(o)} tiene valor; aguanta hasta {_c(omin) if omin else _c(justa)}."
+    elif omin:
+        veredicto = f"Solo si BetPlay paga {_c(omin)} o más; a {_c(o)} pierde a la larga."
+    else:
+        veredicto = "No apostar: la cuota no paga el riesgo."
+    return {"escenarios": escenarios, "cuotaJusta": round(justa, 3) if justa else None,
+            "pierde1de": n, "comoPierde": cp, "veredicto": veredicto,
+            "lectura": (f"Gana {_pct(p, 0)}" + (f", devuelve {_pct(push, 0)}" if push else "")
+                        + f", pierde {_pct(pierde, 0)}" + (f" (1 de cada {n})" if n else "") + f": pierde {cp}.")}
 
 
 def por_que_jugada(tipo: str, j: dict) -> list[str]:

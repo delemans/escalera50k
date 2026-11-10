@@ -213,6 +213,7 @@ def _cuerpo_sencilla(dia, item):
            f"🏆 {e(p.get('lg'))} · ⏱ {e(p.get('t'))}",
            f"▸ <b>{e(p.get('sel'))}</b> · ref {cuota(p.get('o'))} ({e(p.get('bk'))})",
            f"Confianza en los datos {estrellas(p.get('confianza'))}", ""]
+    out += _lectura(j)
     if j.get("aFavor"):
         out.append("📌 <b>Por qué</b>")
         out += [f"• {e(x)}" for x in j["aFavor"][:4]]
@@ -220,6 +221,18 @@ def _cuerpo_sencilla(dia, item):
         out.append("⚖️ <b>En contra</b>")
         out += [f"• {e(x)}" for x in j["enContra"][:3]]
     return out
+
+
+def _lectura(j: dict) -> list[str]:
+    """Bloque visual del análisis: barra gana/devuelve/pierde, cómo se pierde y veredicto."""
+    if not j.get("escenarios"):
+        return []
+    trozos = {"gana": "🟩", "devuelve": "🟨", "pierde": "🟥"}
+    barra_txt = "".join(trozos[x["t"]] * max(0, round(x["p"] * 10)) for x in j["escenarios"])[:10]
+    out = [f"{barra_txt}  <i>{e(j.get('lectura', ''))}</i>"]
+    if j.get("cuotaJusta"):
+        out.append(f"⚖️ Cuota justa {cuota(j['cuotaJusta'])} · 🧭 {e(j.get('veredicto', ''))}")
+    return out + [""]
 
 
 def _cuerpo_escalera(dia, item):
@@ -238,6 +251,9 @@ def _cuerpo_escalera(dia, item):
         det = next((d for d in (j.get("detalle") or []) if d.get("id") == x.get("id")), None)
         if det and det.get("razones"):
             out.append(f"    💡 <i>{e(det['razones'][0])}</i>")
+        jus = ((_pick(dia, x.get("id")) or {}).get("justificacion") or {})
+        if jus.get("lectura"):
+            out.append(f"    🎲 <i>{e(jus['lectura'])}</i>")
     if not item["monto"]:
         out.append("<i>Montos de la simulación del sistema (no es dinero real hoy).</i>")
     out += ["", f"🏁 Si completa: <b>{pesos(j['final'] * factor)}</b> · prob. {pct(j['P'], dec=1)}",
@@ -608,3 +624,84 @@ def ayuda() -> str:
         "/tipster picks de Sharpods y su récord (reenvíame sus mensajes)",
         "/metodo cómo decide · /silencio recordatorios de noche · /ia qué IA está activa", "",
         "<i>No apuesto ni prometo resultados: te doy probabilidad y valor esperado.</i>"])
+
+
+# ---------------------------------------------------------------------------
+# Resultados ordenados (lo que ya pasó) y saludo según la hora
+# ---------------------------------------------------------------------------
+def saludo_hora(hora: int | None = None) -> str:
+    if hora is None:
+        import datetime as _dt
+        hora = (_dt.datetime.utcnow().hour - 5) % 24
+    return "Buenos días ☀️" if hora < 12 else ("Buenas tardes 🌤" if hora < 19 else "Buenas noches 🌙")
+
+
+_NORM_RES = {"ganado": "ganado", "ganada": "ganado", "gano": "ganado", "won": "ganado",
+             "perdido": "perdido", "perdida": "perdido", "perdio": "perdido", "lost": "perdido",
+             "nulo": "nulo", "nula": "nulo", "devuelta": "nulo", "anulada": "nulo", "aplazado": "nulo",
+             "pendiente": "pendiente", "abierta": "pendiente", None: "pendiente", "": "pendiente"}
+
+
+def _fila_resultado(x: dict) -> dict:
+    res = _NORM_RES.get((x.get("resultado") or x.get("estado") or "").lower(), "pendiente")
+    o = x.get("cuotaReal") or x.get("cuota") or x.get("cuotaRef")
+    v = x.get("stakeReal") or x.get("valor") or x.get("stake")
+    neto = x.get("netoReal")
+    if neto is None and x.get("neto") is not None and x.get("real") is not False:
+        neto = x.get("neto")
+    if neto is None and v and res != "pendiente":
+        neto = v * (o - 1) if res == "ganado" and o else (-v if res == "perdido" else 0)
+    return {"fecha": x.get("fecha") or "", "res": res, "o": o, "v": v, "neto": neto,
+            "txt": x.get("titulo") or x.get("sel") or x.get("seleccion") or x.get("partido") or "Apuesta",
+            "marcador": x.get("marcador") or "", "tipo": x.get("tipo") or ""}
+
+
+def resultados(registro: list[dict], dia: dict | None = None, dias: int = 7) -> str:
+    """Lo que ya pasó, ordenado: récord y neto arriba, luego día por día (más reciente primero),
+    dentro de cada día ganadas → nulas → perdidas → pendientes. Solo tus apuestas reales."""
+    vistos, filas = set(), []
+    fuentes = list(registro or []) + list((dia or {}).get("misApuestas") or []) + list((dia or {}).get("liquidado") or [])
+    for x in fuentes:
+        if x.get("tipo") == "pick" or x.get("accion") == "no_hice":
+            continue
+        f = _fila_resultado(x)
+        clave = (f["fecha"], f["txt"].lower(), f["v"])
+        if clave in vistos:
+            continue
+        vistos.add(clave)
+        filas.append(f)
+    if not filas:
+        return ("📒 <b>Resultados</b>\nTodavía no hay apuestas registradas.\n"
+                "Mándame un pantallazo o escribe <i>«hice la escalera por 5000 a 1,55»</i>.")
+    cerradas = [f for f in filas if f["res"] != "pendiente"]
+    g = sum(f["res"] == "ganado" for f in cerradas)
+    p = sum(f["res"] == "perdido" for f in cerradas)
+    n = sum(f["res"] == "nulo" for f in cerradas)
+    neto = sum(f["neto"] or 0 for f in cerradas)
+    jugado = sum(f["v"] or 0 for f in cerradas)
+    racha, tipo_racha = 0, None
+    for f in sorted(cerradas, key=lambda f: f["fecha"], reverse=True):
+        if f["res"] == "nulo":
+            continue
+        if tipo_racha in (None, f["res"]):
+            tipo_racha, racha = f["res"], racha + 1
+        else:
+            break
+    out = [_titulo("📒", "RESULTADOS", f"últimos {dias} días"),
+           f"✅ {g}   ❌ {p}   ➖ {n}   ⏳ {len(filas) - len(cerradas)}",
+           f"💵 Neto: <b>{pesos(neto, True)}</b>" + (f" · ROI {pct(neto / jugado)}" if jugado else "")]
+    if racha >= 2:
+        out.append(("🔥 Racha de " if tipo_racha == "ganado" else "🧊 Racha de ") + f"{racha} "
+                   + ("ganadas" if tipo_racha == "ganado" else "perdidas — momento de bajar el ritmo"))
+    orden = {"ganado": 0, "nulo": 1, "perdido": 2, "pendiente": 3}
+    fechas = sorted({f["fecha"] for f in filas}, reverse=True)[:dias]
+    for fe in fechas:
+        del_dia = sorted([f for f in filas if f["fecha"] == fe], key=lambda f: orden[f["res"]])
+        neto_dia = sum(f["neto"] or 0 for f in del_dia if f["res"] != "pendiente")
+        out += ["", f"<b>{e(fecha_corta(fe) if fe else 'Sin fecha')}</b> · {pesos(neto_dia, True)}"]
+        for f in del_dia:
+            extra = f" <i>{e(f['marcador'])}</i>" if f["marcador"] else ""
+            monto = f" · {pesos(f['v'])} @{cuota(f['o'])}" if f["v"] else ""
+            res = f" → {pesos(f['neto'], True)}" if f["res"] != "pendiente" and f["neto"] is not None else ""
+            out.append(f"{ICONO_RES[f['res']]} {e(f['txt'])}{extra}{monto}{res}")
+    return "\n".join(out)
