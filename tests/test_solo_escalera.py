@@ -15,7 +15,9 @@ def test_rango_cuota_y_solo_escalera():
     esc = jug["escalera"]
     assert esc and esc["stake"] == 5000
     assert all(1.40 <= p["o"] <= 1.60 for p in esc["patas"])
-    assert jug["progresion"] is None and jug["combinada"] is None and jug["super"] is None
+    assert jug["combinada"] is None and jug["super"] is None
+    pr = jug["progresion"]                      # serie activa: sale el siguiente escalón, en el mismo rango
+    assert pr and 1.40 <= pr["patas"][0]["o"] <= 1.60 and pr["stake"] == 9000
     assert jug["sencillas"]["ids"] == []
 
 

@@ -1,7 +1,8 @@
 """
 CLI · comandos que usa la tarea programada (y tú, para probar)
 =============================================================
-  python -m escalera.cli candidatos statarea.csv [--ajuste -1] [--desde 12:00] [--max 45]   → candidatos.json
+  python -m escalera.cli candidatos statarea.csv [--ajuste -1] [--desde 12:00] [--max 45] [--sin-api]   → candidatos.json
+      (suma solos los candidatos con cuotas reales de The Odds API: ODDS_API_KEY o el bot en Render /cuotas.json)
   python -m escalera.cli analizar entrada.json  [--out salida.json]
   python -m escalera.cli liquidar entrada.json  [--out salida.json]
   python -m escalera.cli informe apuestas.json  [--inicial 90000] [--real]
@@ -22,6 +23,32 @@ from .nucleo import simulacion as SIM
 from .nucleo import tipster as TIP
 from .nucleo import validacion as VAL
 from .nucleo import valor as V
+
+
+def _cuotas_api(filas, desde=None):
+    """Candidatos con cuotas reales de muchas ligas: The Odds API directo (ODDS_API_KEY) o vía el bot
+    en Render (/cuotas.json). Ya traen "casas" y "verificado": no hace falta buscarles cuotas a mano."""
+    import os
+    import urllib.request
+    from .fuentes import odds_api
+    datos, nota = None, ""
+    clave = os.environ.get("ODDS_API_KEY", "")
+    try:
+        if clave:
+            d0, d1 = odds_api.ventana_hoy()
+            datos, nota = odds_api.descargar(clave, d0, d1), "directo"
+        else:
+            url = os.environ.get("CUOTAS_URL", "https://escalera50k.onrender.com/cuotas.json")
+            with urllib.request.urlopen(url, timeout=90) as r:
+                datos, nota = json.loads(r.read().decode()), "vía bot"
+    except Exception as ex:
+        return [], f"no disponibles ({type(ex).__name__})"
+    if datos.get("error"):
+        return [], datos["error"]
+    cands = odds_api.convertir(datos, filas)
+    if desde:
+        cands = [c for c in cands if c["t"] >= desde or c.get("fecha", "") > odds_api.dt.datetime.now(odds_api.BOG).date().isoformat()]
+    return cands, f"{nota} · {len(datos.get('ligas', []))} ligas · créditos restantes {datos.get('restante')}"
 
 
 def _leer(ruta):
@@ -46,6 +73,7 @@ def main(argv=None):
     c.add_argument("--desde", default="07:30", help="solo partidos desde esta hora (Bogotá), p. ej. 12:00 en un escaneo manual")
     c.add_argument("--max", type=int, default=45)
     c.add_argument("--solo-principales", action="store_true")
+    c.add_argument("--sin-api", action="store_true", help="no sumar cuotas automáticas (The Odds API)")
     c.add_argument("--out")
     for nombre in ("analizar", "liquidar"):
         s = sub.add_parser(nombre)
@@ -75,9 +103,14 @@ def main(argv=None):
         filas, errores = VAL.leer_csv(Path(a.csv).read_text(encoding="utf-8"))
         if a.ajuste:
             VAL.ajustar_hora(filas, a.ajuste)
-        _salida({"partidos": len(filas), "errores": errores,
-                 "validacion": VAL.validar(filas), "candidatos": A.candidatos_statarea(
-                     filas, hora_min=a.desde, maximo=a.max, amplia=not a.solo_principales)}, a.out)
+        cands = A.candidatos_statarea(filas, hora_min=a.desde, maximo=a.max, amplia=not a.solo_principales)
+        extra, nota = ([], "sin cuotas automáticas (--sin-api)") if a.sin_api else _cuotas_api(filas, a.desde)
+        vistos = {(c["h"], c["a"], c.get("mercado"), str(c.get("lado")), c.get("linea")) for c in cands}
+        extra = [c for c in extra if (c["h"], c["a"], c.get("mercado"), str(c.get("lado")), c.get("linea")) not in vistos]
+        print(f"Cuotas automáticas: {len(extra)} candidatos con casas y hora verificada · {nota}", file=sys.stderr)
+        _salida({"partidos": len(filas), "errores": errores, "validacion": VAL.validar(filas),
+                 "cuotasAutomaticas": {"n": len(extra), "nota": nota},
+                 "candidatos": cands + extra}, a.out)
     elif a.cmd == "analizar":
         entrada = _leer(a.entrada)
         if entrada.get("statarea_csv", "").endswith(".csv"):

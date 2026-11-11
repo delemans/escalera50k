@@ -172,7 +172,14 @@ def evaluar(c: dict, exigir_verificado: bool = False) -> dict:
              ev=round(e, 4), omin=round(MK.cuota_minima(p, p_push), 3), kelly=round(MK.kelly(p, p_push, o), 4),
              valor=e >= V.MARGEN_VALOR, alerta=bool(c.get("alerta")), soloMercado=sa is None)
     motivo = None
-    if sa is not None and abs(sa - mk) > DESVIO_MAX:
+    if sa is not None and abs(sa - mk) > DESVIO_MAX and r["n"] >= 3 and r["afilada"]:
+        # Mercado afilado (Pinnacle/Betfair + 3 casas) manda: no se descarta, se usa solo el mercado
+        c["notaModelo"] = (f"StatArea ({sa * 100:.0f} %) no coincide con un mercado afilado de {r['n']} casas: "
+                           "se usa solo el mercado.").replace(".", ",", 0)
+        c.update(p=round(mk, 4), ev=round(MK.ev(mk, p_push, o), 4), omin=round(MK.cuota_minima(mk, p_push), 3),
+                 kelly=round(MK.kelly(mk, p_push, o), 4), soloMercado=True)
+        c["valor"] = c["ev"] >= V.MARGEN_VALOR
+    elif sa is not None and abs(sa - mk) > DESVIO_MAX:
         motivo = f"Desvío StatArea−mercado {(sa - mk) * 100:+.1f} pts".replace(".", ",").replace("-", "−")
     elif r["dispersion"] > DISPERSION_MAX:
         motivo = "Las casas no coinciden (dispersión alta)"

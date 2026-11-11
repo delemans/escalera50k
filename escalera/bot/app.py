@@ -511,6 +511,14 @@ def conversar(chat_id, texto, imagen=None, fuente="texto"):
     dia = sync.dia()
     pol = alertas.politica(dia)
     desde = sync.ahora().date().isoformat()[:8] + "01"
+    rep = charla.parse_reporte(texto) if texto and not imagen else None
+    if rep:                                           # reporte de escalón: se entiende sin IA y sugiere el siguiente
+        tg.enviar(chat_id, charla.respuesta_reporte(rep, dia))
+        prop = {k: v for k, v in rep.items() if k != "cobro"}
+        proponer(chat_id, [prop], fuente)
+        db.recordar("user", texto)
+        db.recordar("assistant", f"Registro propuesto: {rep['sel']} {rep['valor']} @{rep['cuota']} {rep['estado']}")
+        return
     try:
         respuesta, propuestas = ia.conversar(db.memoria(), texto, imagen, dia, db.registro(desde),
                                              sync.ahora().strftime("%A %d/%m/%Y %H:%M"), pol)

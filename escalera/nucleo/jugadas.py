@@ -180,15 +180,19 @@ def progresion(cands: list[dict], r: Reglas, cfg: dict) -> dict | None:
     if not cfg.get("activo"):
         return None
     pool = [c for c in cands if not c.get("alerta")
-            and r.progresion_cuota[0] <= c["o"] <= r.progresion_cuota[1]]
+            and r.progresion_cuota[0] <= c["o"] <= r.progresion_cuota[1]
+            and _q(c) >= r.escalera_p and c["p"] >= r.escalera_p_gana_min]
     if not pool:
         return None
-    c = max(pool, key=lambda c: (c["p"], c["ev"]))
+    c = max(pool, key=lambda c: (_q(c), c["ev"]))          # con DNB: el empate devuelve y la serie sigue
     saldo = cfg["saldo"]
     faltan = max(1, math.ceil(math.log(cfg["meta"] / saldo) / math.log(c["o"])))
     return {"tipo": "progresion", "reto": cfg["reto"], "paso": cfg["paso"], "saldo": saldo,
             "base": cfg["base"], "meta": cfg["meta"], "stake": saldo, "patas": [_pata(c)],
-            "P": round(c["p"], 4), "ev": round(c["p"] * c["o"] - 1, 4),
+            "P": round(_q(c), 4), "ev": round(c["p"] * c["o"] + (c.get("p_push") or 0) - 1, 4),
+            "conSeguro": 1 if (c.get("p_push") or 0) > 0 else 0,
+            "apartarBase": bool(cfg.get("base")) and cfg["paso"] > r.escalera_retiro,
+            "stakeSeguro": max(0, saldo - cfg["base"]) if cfg.get("base") and saldo > cfg["base"] else None,
             "Pmeta": round(c["p"] ** faltan, 4), "pasosFaltan": faltan}
 
 
@@ -383,6 +387,14 @@ def armar(cands: list[dict], fecha: str, cfg_prog: dict, r: Reglas | None = None
     if r.solo_escalera:
         if esc:
             esc["id"] = f"{fecha}-esc"
+        prog = None
+        if (cfg_prog or {}).get("activo"):                 # serie de varios días: el siguiente escalón
+            r.progresion_cuota = r.escalera_cuota
+            prog = progresion(cands, r, cfg_prog)
+            if prog:
+                prog["id"] = f"{fecha}-prog"
+            else:
+                avisos.append(f"Hoy no hay peldaño {cfg_prog.get('paso')} de la serie: ningún pick en el rango de cuota pasa los filtros.")
         sup = super_(cands, r) if r.sonadora_activa else None
         if sup:
             sup["id"] = f"{fecha}-super"
@@ -395,7 +407,7 @@ def armar(cands: list[dict], fecha: str, cfg_prog: dict, r: Reglas | None = None
         if len(reserva) < 20:
             avisos.append(f"Planes de respaldo: {len(reserva)} de 20 (no hay más combinaciones que pasen los filtros hoy).")
         return {"sencillas": {"stake": r.stakes["sencilla"], "ids": []}, "escalera": esc,
-                "progresion": None, "combinada": None, "super": sup, "soloEscalera": True,
+                "progresion": prog, "combinada": None, "super": sup, "soloEscalera": True,
                 "reserva": reserva}, avisos
     jug = {"sencillas": {"stake": r.stakes["sencilla"], "ids": [c["id"] for c in senc]},
            "escalera": esc, "progresion": progresion(cands, r, cfg_prog),

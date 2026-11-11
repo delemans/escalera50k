@@ -169,3 +169,66 @@ def responder(texto: str, dia: dict, registro: list[dict] | None = None, banca: 
                 "• un pantallazo o <i>«hice la escalera por 5000»</i> para registrar")
     except Exception:                                  # nunca tumbar la charla
         return "Se me enredó la respuesta 😅. Prueba con /hoy, /plan o /resultados."
+
+
+# ---------------------------------------------------------------------------
+# Reporte de un escalón: «el escalón fue Leganés -de 3.5 con $8381 1.55 ganado 12990»
+# ---------------------------------------------------------------------------
+_RES = [("ganado", r"\bgan(e|o|ado|ada|amos)\b|\bverde\b|\bcobr"), ("perdido", r"\bperd(i|io|ido|ida|imos)\b|\brojo\b"),
+        ("nulo", r"\bnul[oa]\b|devol|anulad"), ("pendiente", r"pendiente|en juego|jugando")]
+
+
+def parse_reporte(texto: str) -> dict | None:
+    """Entiende el reporte de una apuesta de la escalera (o cualquier apuesta) y devuelve la propuesta
+    de registro {accion, ref, tipo, partido, sel, cuota, valor, estado, cobro}. None si no es un reporte."""
+    t = _n(texto)
+    if not re.search(r"escal|pelda|aposte|apostamos|hice|monte|jugue|boleto", t):
+        return None
+    t2 = re.sub(r"(?<![a-z])-\s*de\b", " menos de ", t)
+    t2 = re.sub(r"(?<![a-z])\+\s*de\b", " mas de ", t2)
+    t2 = re.sub(r"\s+", " ", t2).strip()
+    cuotas = [float(x.replace(",", ".")) for x in re.findall(r"(?<![\d$])(\d[.,]\d{1,3})(?![\d])", t2)]
+    cuotas = [c for c in cuotas if 1.01 <= c <= 50]
+    lineas = [float(x.replace(",", ".")) for x in re.findall(r"(?:menos|mas) de (\d+[.,]5)", t2)]
+    cuotas = [c for c in cuotas if c not in lineas] or []
+    montos = [int(re.sub(r"[.,]", "", x)) for x in re.findall(r"\$?\s?(\d{1,3}(?:[.,]\d{3})+|\d{4,7})", t2)]
+    if not cuotas or not montos:
+        return None
+    estado = next((nombre for nombre, pat in _RES if re.search(pat, t2)), "pendiente")
+    valor = montos[0]
+    cobro = montos[1] if len(montos) > 1 else None
+    o = cuotas[0]
+    m = None
+    for m in re.finditer(r"\b(?:fue|era|escalon|peldano|aposte|hice|monte)\s+(?:el\s+|la\s+)?(.+?)\s+(?:con|por|a)\s+\$?\d", t2):
+        pass                                          # el último «fue/escalón …» antes del monto
+    sel = (m.group(1) if m else "").strip(" :,.-")
+    while re.match(r"^(fue|era|el|la|de|hoy)\s+", sel):
+        sel = re.sub(r"^(fue|era|el|la|de|hoy)\s+", "", sel)
+    sel = sel or "Escalón reportado"
+    return {"accion": "propia", "ref": None, "tipo": "progresion" if re.search(r"escal|pelda", t) else "sencilla",
+            "partido": None, "sel": sel[:80], "cuota": o, "valor": valor, "estado": estado,
+            "cobro": cobro or (round(valor * o) if estado == "ganado" else None)}
+
+
+def respuesta_reporte(rep: dict, dia: dict) -> str:
+    """Confirma lo entendido y sugiere el siguiente escalón con los datos del día."""
+    out = [f"🪜 <b>Entendido: escalón {e(rep['sel'])}</b>",
+           f"{pesos(rep['valor'])} @ {cuota(rep['cuota'])} · {M.ICONO_RES.get(rep['estado'], '•')} {e(rep['estado'])}"]
+    if rep["estado"] == "ganado":
+        cobro = rep["cobro"] or round(rep["valor"] * rep["cuota"])
+        out += [f"💰 Cobraste <b>{pesos(cobro)}</b> (ganancia {pesos(cobro - rep['valor'], True)}).", "",
+                f"➡️ <b>Siguiente escalón:</b> todo lo cobrado, {pesos(cobro)}."
+                f"\n🛟 Modo seguro: apartas tu base {pesos(rep['valor'])} y subes solo la ganancia "
+                f"{pesos(cobro - rep['valor'])}."]
+        pr = (dia.get("jugadas") or {}).get("progresion")
+        it = next((x for x in (dia.get("plan") or []) if x.get("tipo") == "progresion"), None)
+        if pr and it:
+            p = pr["patas"][0]
+            out.append(f"\n🎯 Pick para ese escalón: <b>{e(p['sel'])}</b> ({e(p['partido'])}, {e(p['t'])}) "
+                       f"@{cuota(p['o'])} · solo si BetPlay paga ≥ <b>{cuota(it.get('cuota_min'))}</b>.")
+        else:
+            out.append("\n🎯 El pick del siguiente escalón sale en la revisión de la mañana (o pide /escanear).")
+    elif rep["estado"] == "perdido":
+        out += ["", "La serie se reinicia con la base. Respira: no subas el monto para recuperar. 💙"]
+    out.append("\nConfirma abajo y lo guardo en tu registro.")
+    return "\n".join(out)

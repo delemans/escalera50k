@@ -45,6 +45,8 @@ RUTINA_TOKEN = os.environ.get("RUTINA_TOKEN", "")   # token del disparador (se m
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 MODELO = os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-5")
 # IA gratis y balanceo (se usa el primero con clave; si falla, el siguiente)
+ODDS_API_KEY = os.environ.get("ODDS_API_KEY", "")          # the-odds-api.com (gratis 500 créditos/mes)
+ODDS_MAX_LIGAS = int(os.environ.get("ODDS_MAX_LIGAS", "8"))
 IA_ORDEN = os.environ.get("IA_ORDEN", "gemini,groq,openrouter,anthropic")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY", "")
 GEMINI_MODELO = os.environ.get("GEMINI_MODEL", "")           # vacío = se elige solo

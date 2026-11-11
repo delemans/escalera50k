@@ -3,6 +3,7 @@ SERVIDOR WEB INTERNO · para Render (o cualquier PaaS) sin Caddy ni Docker
 =========================================================================
   POST /telegram/<secreto>   webhook de Telegram (verifica el encabezado secreto)
   GET  /salud                estado del bot (público, para el "ping" que lo mantiene despierto)
+  GET  /cuotas.json          cuotas de The Odds API para hoy (caché 10 h; necesita ODDS_API_KEY en Render)
   GET  /tipster.json         picks de tipster reenviados (últimos 7 días, solo lectura, para la tarea)
   GET  /escaneo.json         ¿hay un escaneo pedido con /escanear? (para la tarea vigía)
   GET  /escaneo/atendido?firma=…   la vigía marca el pedido como lanzado
@@ -72,6 +73,8 @@ class Manejador(BaseHTTPRequestHandler):
             desde = (dt.date.today() - dt.timedelta(days=7)).isoformat()
             cuerpo = json.dumps({"picks": db.tipster(desde)}, ensure_ascii=False).encode()
             return self._responder(200, cuerpo, "application/json; charset=utf-8", {"Cache-Control": "no-store"})
+        if ruta == "/cuotas.json":
+            return self._responder(200, cuotas_cache(), "application/json; charset=utf-8", {"Cache-Control": "no-store"})
         if ruta == "/escaneo.json":
             from . import db
             e = db.get("escaneo") or {}
@@ -127,6 +130,29 @@ class Manejador(BaseHTTPRequestHandler):
 
     def log_message(self, *args):          # sin ruido en los logs
         pass
+
+
+def cuotas_cache(horas: float = 10.0) -> bytes:
+    """Descarga las cuotas del día una vez cada `horas` (cuida los créditos del plan gratis)."""
+    import time
+    f = config.PANEL / "cuotas.json"
+    if f.exists() and time.time() - f.stat().st_mtime < horas * 3600:
+        return f.read_bytes()
+    if not config.ODDS_API_KEY:
+        return json.dumps({"eventos": [], "error": "Falta ODDS_API_KEY en Render (gratis en the-odds-api.com)"}).encode()
+    from ..fuentes import odds_api
+    try:
+        desde, hasta = odds_api.ventana_hoy()
+        datos = odds_api.descargar(config.ODDS_API_KEY, desde, hasta, max_ligas=config.ODDS_MAX_LIGAS)
+    except Exception as ex:                       # nunca tumbar el bot por la API
+        return json.dumps({"eventos": [], "error": f"{type(ex).__name__}: {ex}"[:200]}).encode()
+    cuerpo = json.dumps(datos, ensure_ascii=False).encode()
+    try:
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_bytes(cuerpo)
+    except OSError:
+        pass
+    return cuerpo
 
 
 def arrancar(puerto: int) -> ThreadingHTTPServer:

@@ -36,3 +36,16 @@ def test_resultados_ordenados():
 def test_nunca_falla():
     assert charla.responder("asdf qwer", {})
     assert charla.responder("hola", {})
+
+
+def test_reporte_escalon_leganes():
+    rep = charla.parse_reporte("le escribo que la escalera de hoy el escalon fue leganes -de 3.5 con $8381 1.55 ganado 12990")
+    assert rep and rep["cuota"] == 1.55 and rep["valor"] == 8381 and rep["estado"] == "ganado" and rep["cobro"] == 12990
+    assert "menos de 3" in rep["sel"] and "leganes" in rep["sel"]
+    txt = charla.respuesta_reporte(rep, {})
+    assert "12.990" in txt and "4.609" in txt
+
+
+def test_no_es_reporte():
+    assert charla.parse_reporte("hola cómo vas") is None
+    assert charla.parse_reporte("me pagan 1,55 por envigado") is None

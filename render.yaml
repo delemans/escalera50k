@@ -21,6 +21,8 @@ services:
         value: gemini,groq,openrouter,anthropic
       - key: TOKEN_BOT
         sync: false
+      - key: ODDS_API_KEY          # gratis: the-odds-api.com → cuotas reales de muchas ligas
+        sync: false
       - key: GEMINI_API_KEY        # gratis: aistudio.google.com → Get API key
         sync: false
       - key: GROQ_API_KEY          # opcional, gratis: console.groq.com → API Keys (respaldo y voz)
