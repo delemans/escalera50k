@@ -152,30 +152,32 @@ def guardar_tipster(items: list[dict]) -> dict:
 
 def _compacto_dia(dia: dict) -> dict:
     """Resumen corto del día (los planes gratis tienen pocos tokens por minuto)."""
-    if not dia:
+    if not isinstance(dia, dict) or not dia:
         return {}
+    _d = lambda x: x if isinstance(x, dict) else {}          # los datos del sitio a veces llegan con otra forma
+    _l = lambda x: [i for i in x if isinstance(i, dict)] if isinstance(x, list) else []
     picks = [{**{k: p.get(k) for k in ("id", "h", "a", "lg", "t", "mercado", "sel", "o", "bk", "p", "p_push", "ev",
                                         "omin", "valor", "confianza", "noticias", "alerta", "motivo")},
-              "porQue": (p.get("justificacion") or {}).get("aFavor", [])[:3],
-              "enContra": (p.get("justificacion") or {}).get("enContra", [])[:2]} for p in dia.get("picks", [])]
+              "porQue": (_d(p.get("justificacion")).get("aFavor") or [])[:3],
+              "enContra": (_d(p.get("justificacion")).get("enContra") or [])[:2]} for p in _l(dia.get("picks"))]
     jug = {}
-    for k, j in (dia.get("jugadas") or {}).items():
-        if not j:
+    for k, j in _d(dia.get("jugadas")).items():
+        if not isinstance(j, dict) or not j:
             continue
         if k == "sencillas":
             jug[k] = j.get("ids")
         else:
             jug[k] = {x: j.get(x) for x in ("id", "cuota", "P", "ev", "final", "montos", "reto", "paso",
                                              "saldo", "meta", "Pmeta") if j.get(x) is not None}
-            jug[k]["patas"] = [f"{p['t']} {p['sel']} @{p['o']} ({p['id']})" for p in j.get("patas", [])]
+            jug[k]["patas"] = [f"{p.get('t')} {p.get('sel')} @{p.get('o')} ({p.get('id')})" for p in _l(j.get("patas"))]
     est = {}
-    for k, e in (dia.get("estadisticas") or {}).items():
-        if e and e.get("n"):
+    for k, e in _d(dia.get("estadisticas")).items():
+        if isinstance(e, dict) and e.get("n"):
             est[k] = {x: e.get(x) for x in ("n", "aciertos", "esperado", "roi", "beneficio", "pValor",
                                              "brier", "maxDrawdown")}
-    return {"fecha": dia.get("fecha"), "veredicto": (dia.get("veredicto") or {}).get("texto"),
+    return {"fecha": dia.get("fecha"), "veredicto": _d(dia.get("veredicto")).get("texto") or (dia.get("veredicto") if isinstance(dia.get("veredicto"), str) else None),
             "plan": [{k: i.get(k) for k in ("id", "titulo", "tipo", "hora", "accion", "monto", "cuota_ref",
-                                             "cuota_min", "p", "p_push", "ev", "razon")} for i in dia.get("plan", [])],
+                                             "cuota_min", "p", "p_push", "ev", "razon")} for i in _l(dia.get("plan"))],
             "misApuestas": dia.get("misApuestas"), "porQueJugadas": dia.get("porQue"),
             "escalera": {"config": dia.get("progresionCfg"), "proximo": dia.get("escaleraCrec")},
             "riesgo": dia.get("riesgo"),
@@ -188,7 +190,13 @@ def _compacto_dia(dia: dict) -> dict:
 
 def _contexto(dia: dict, registro: list, fecha: str, pol: STK.PoliticaStake) -> str:
     reg = [{k: a.get(k) for k in ("fecha", "accion", "ref", "sel", "cuota", "valor", "estado")}
-           for a in registro[-15:]]
+           for a in (registro or [])[-15:] if isinstance(a, dict)]
+    try:
+        compacto = _compacto_dia(dia)
+    except Exception:                                   # un dato raro del día no puede dejar al bot sin IA
+        log.exception("No se pudo resumir el día para la IA")
+        compacto = {"fecha": dia.get("fecha") if isinstance(dia, dict) else None,
+                    "aviso": "El resumen del día no está disponible; responde con el registro y el mensaje."}
     try:
         from . import db
         recibidos = [{k: t.get(k) for k in ("tipster", "partido", "sel", "cuota", "hora", "tipo")}
@@ -197,8 +205,8 @@ def _contexto(dia: dict, registro: list, fecha: str, pol: STK.PoliticaStake) -> 
         recibidos = []
     return (f"\n\nAHORA (Bogotá): {fecha}\nPOLÍTICA: banca {pol.banca:.0f}, unidad {pol.unidad:.0f}, "
             f"tope diario {pol.tope_diario:.0f}, freno {'sí' if pol.freno else 'no'}"
-            f"\n\nDÍA:\n{json.dumps(_compacto_dia(dia), ensure_ascii=False, separators=(',', ':'))[:12000]}"
-            f"\n\nREGISTRO DEL USUARIO:\n{json.dumps(reg, ensure_ascii=False, separators=(',', ':'))}"
+            f"\n\nDÍA:\n{json.dumps(compacto, ensure_ascii=False, separators=(',', ':'), default=str)[:12000]}"
+            f"\n\nREGISTRO DEL USUARIO:\n{json.dumps(reg, ensure_ascii=False, separators=(',', ':'), default=str)}"
             f"\n\nPICKS DE TIPSTER RECIBIDOS HOY:\n{json.dumps(recibidos, ensure_ascii=False, separators=(',', ':'))}")
 
 
@@ -456,7 +464,11 @@ def conversar(historial: list[dict], texto: str, imagen: bytes | None, dia: dict
                     "Mientras, escríbeme la apuesta: «hice la 2 a 1,45 por 3000»."), []
         return ("⚠️ No hay IA configurada. Crea una clave GRATIS en aistudio.google.com → Get API key "
                 "y ponla como GEMINI_API_KEY en Render → Environment. Los botones y comandos sí funcionan."), []
-    sistema = SISTEMA + _contexto(dia, registro, fecha, pol)
+    try:
+        sistema = SISTEMA + _contexto(dia, registro, fecha, pol)
+    except Exception:
+        log.exception("Falló el contexto de la IA; sigo solo con las instrucciones")
+        sistema = SISTEMA + f"\n\nAHORA (Bogotá): {fecha}"
     errores = []
     for nombre in lista:
         propuestas: list[dict] = []

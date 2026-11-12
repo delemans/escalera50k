@@ -80,3 +80,16 @@ def test_sin_claves(monkeypatch):
     txt, _ = ia.conversar([], "hola", None, {}, [], "hoy", alertas.politica({}))
     assert "GEMINI_API_KEY" in txt
     assert sync  # módulo importable
+
+
+def test_contexto_aguanta_un_dia_con_formas_raras():
+    """El error real: «No pude procesar eso ahora (AttributeError)» dejaba al bot sin IA ni lectura de pantallazos."""
+    from escalera.bot import ia
+    from escalera.nucleo import staking as STK
+    raro = {"fecha": "2026-11-12", "veredicto": "texto suelto", "estadisticas": {"sistema": 0.5, "real": [1, 2]},
+            "jugadas": {"sencillas": ["a"], "progresion": {"patas": [{"sel": "X"}, "roto"]}, "escalera": 3},
+            "picks": [{"id": 1, "justificacion": "no es dict"}, "roto"], "plan": ["roto", {"id": "p1"}]}
+    c = ia._compacto_dia(raro)
+    assert c["veredicto"] == "texto suelto" and c["plan"][0]["id"] == "p1" and len(c["picks"]) == 1
+    for dia in (raro, None, [], "x"):
+        assert "AHORA" in ia._contexto(dia, [None, {"sel": "a"}], "jueves", STK.PoliticaStake())
