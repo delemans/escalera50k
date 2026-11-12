@@ -425,6 +425,43 @@ def _refrescar_tarjeta(dia, item, estado):
 # Respuestas a una espera (cuota de BetPlay o detalle de la apuesta)
 # ---------------------------------------------------------------------------
 NUM = r"\$?\d+(?:[.,]\d+)*"
+_DECIMAL_SUELTO = re.compile(r"(?<![\d.,])(\d{1,2})(?:\s+([.,])\s*|\s*([.,])\s+)(\d{1,2})(?![\d.,])")
+CUOTA_DUDOSA = 10.0            # desde aquí se pide confirmar: casi siempre es un decimal mal escrito
+
+
+def pegar_decimales(texto: str) -> str:
+    """«1 ,44 6100» o «1, 44 6100» → «1,44 6100»: une el decimal que quedó separado por un espacio."""
+    return _DECIMAL_SUELTO.sub(lambda m: f"{m.group(1)}{m.group(2) or m.group(3)}{m.group(4)}", texto)
+
+
+_CORRIGE = re.compile(r"\bcuota\b[^\d]{0,25}(\d{1,2}\s*[.,]\s*\d{1,3})(?!\d)")
+
+
+def corregir_cuota(chat_id, texto) -> bool:
+    """«No, la cuota es 1,44»: corrige la cuota del último registro de hoy sin pasar por la IA."""
+    m = _CORRIGE.search(pegar_decimales(texto.lower()))
+    if not m or len(texto) > 80:
+        return False
+    o = F.leer_numero(re.sub(r"\s", "", m.group(1)))
+    if not o or not 1.01 <= o <= 50:
+        return False
+    hechos = [a for a in db.registro(sync.hoy()) if a.get("accion") in ("hice", "propia")]
+    if not hechos:
+        return False
+    ult = hechos[-1]
+    if ult.get("sincronizado"):
+        tg.enviar(chat_id, f"Ese registro ({M.e(ult.get('sel') or '')}) ya se envió al sitio con cuota "
+                           f"{F.cuota(ult.get('cuota'))}. Corrígelo en la app; aquí solo cambio los que no han subido.")
+        return True
+    antes = ult.get("cuota")
+    nuevo = {k: v for k, v in ult.items() if k != "sincronizado"}
+    nuevo["cuota"] = o
+    db.borrar_registro(ult["tgId"])
+    db.registrar([nuevo])
+    sync.publicar_registro()
+    tg.enviar(chat_id, f"✏️ Corregido: <b>{M.e(ult.get('sel') or 'tu apuesta')}</b>\n"
+                       f"Cuota {F.cuota(antes)} → <b>{F.cuota(o)}</b> · valor {M.pesos(ult.get('valor'))}.")
+    return True
 
 
 def resolver_espera(chat_id, texto) -> bool:
@@ -435,7 +472,7 @@ def resolver_espera(chat_id, texto) -> bool:
     if not item:
         db.put("espera", None)
         return False
-    numeros = [F.leer_numero(x) for x in re.findall(NUM, texto)]
+    numeros = [F.leer_numero(x) for x in re.findall(NUM, pegar_decimales(texto))]
     numeros = [n for n in numeros if n]
     if espera["tipo"] == "cuota":
         o = next((n for n in numeros if 1.01 <= n <= 50), None)
@@ -451,6 +488,11 @@ def resolver_espera(chat_id, texto) -> bool:
         v = next((n for n in numeros if n >= 500), None)
         if not (o and v):
             tg.enviar(chat_id, "No entendí cuota y valor. Escríbelo así: <code>1,42 3000</code> o manda el pantallazo.")
+            return True
+        if o >= CUOTA_DUDOSA and not re.search(r"\bs[ií]\b", texto.lower()):
+            tg.enviar(chat_id, f"Leí cuota <b>{F.cuota(o)}</b> y valor {M.pesos(v)}. ¿Seguro? Si era un decimal, "
+                               f"escríbelo pegado: <code>1,44 {int(v)}</code>. Si de verdad es {F.cuota(o)}, "
+                               f"repítelo con «sí»: <code>sí {F.cuota(o)} {int(v)}</code>.")
             return True
         dia = sync.dia()
         avisos = alertas.avisos_de_registro({"accion": "hice", "ref": item["id"], "cuota": o, "valor": v},
@@ -523,9 +565,15 @@ def conversar(chat_id, texto, imagen=None, fuente="texto"):
         respuesta, propuestas = ia.conversar(db.memoria(), texto, imagen, dia, db.registro(desde),
                                              sync.ahora().strftime("%A %d/%m/%Y %H:%M"), pol)
     except Exception as ex:
-        log.exception("Claude falló")
-        tg.enviar(chat_id, f"⚠️ No pude procesar eso ahora ({type(ex).__name__}). Intenta en un minuto; "
-                           "los botones siguen funcionando.")
+        log.exception("La conversación con la IA falló (%s)", type(ex).__name__)
+        if imagen:
+            tg.enviar(chat_id, "⚠️ No pude leer la imagen ahora. Escríbeme la apuesta así: <code>1,44 6100</code>.")
+            return
+        try:                                          # respaldo sin IA: nunca dejar sin respuesta
+            tg.enviar(chat_id, charla.responder(texto or "", dia, db.registro(desde)))
+        except Exception:
+            log.exception("También falló el respaldo sin IA")
+            tg.enviar(chat_id, "⚠️ No pude procesar eso ahora. Prueba con /hoy, /plan o /registro.")
         return
     if respuesta and respuesta.startswith(("⚠️ La IA está saturada", "⚠️ No hay IA configurada")) and not imagen:
         respuesta_html = charla.responder(texto, dia, db.registro(desde))   # respaldo: nunca deja sin respuesta
@@ -624,6 +672,8 @@ def procesar(u: dict):
     if mc and F.leer_numero(mc.group(1)):
         dia = sync.dia()
         tg.enviar(chat_id, en_vivo.evaluar_cobro(dia, F.leer_numero(mc.group(1)), alertas.politica(dia).banca))
+        return
+    if corregir_cuota(chat_id, texto):
         return
     rapido = atajo(texto)
     if rapido:

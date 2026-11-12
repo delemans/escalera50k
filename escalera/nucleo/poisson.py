@@ -1,8 +1,8 @@
 """
 POISSON · «el analista de verdad» (prompt 3) y «modelo vs mercado» (prompt 4)
 =============================================================================
-Goles esperados (λ) de cada equipo → matriz de marcadores (Poisson
-independiente, hasta 10 goles) → probabilidad de cada mercado: 1X2, doble
+Goles esperados (λ) de cada equipo → matriz de marcadores (Poisson con el
+ajuste de Dixon-Coles para 0-0, 1-0, 0-1 y 1-1, hasta 10 goles, normalizada) → probabilidad de cada mercado: 1X2, doble
 oportunidad, empate no apuesta, ambos marcan, más/menos goles, goles de un
 equipo y los 3 marcadores más probables.
 
@@ -13,22 +13,50 @@ en contra de los últimos 10 partidos, local en casa y visitante fuera):
 Si no hay datos, λ se ajusta al mercado (1X2 + más/menos 2,5) solo para
 describir el partido (marcadores probables, escenarios): ese ajuste NO cuenta
 como opinión independiente y no se mezcla en la probabilidad.
+
+Dos correcciones al Poisson simple (ambas se apagan con 0 en la configuración):
+  POISSON_RHO  Dixon y Coles (1997): el Poisson independiente da pocos empates
+               y marcadores bajos; rho negativo sube 0-0 y 1-1.
+  POISSON_K    moderación: con ~10 partidos una racha infla λ. Se mezclan los
+               datos con K partidos «promedio» (1,45 goles el local, 1,15 el
+               visitante: supuesto, total 2,6 como en ajustar_a_mercado).
 """
 from __future__ import annotations
 
 import math
 
+from .. import config
+
 MAX_GOLES = 10
+PRIOR_LOCAL, PRIOR_VISITANTE = 1.45, 1.15      # goles por partido de un equipo promedio (supuesto)
 
 
 def _pmf(k: int, lam: float) -> float:
     return math.exp(-lam) * lam ** k / math.factorial(k)
 
 
-def matriz(lh: float, la: float) -> list[list[float]]:
-    ph = [_pmf(i, lh) for i in range(MAX_GOLES + 1)]
-    pa = [_pmf(j, la) for j in range(MAX_GOLES + 1)]
-    return [[ph[i] * pa[j] for j in range(MAX_GOLES + 1)] for i in range(MAX_GOLES + 1)]
+def _tau(i: int, j: int, lh: float, la: float, rho: float) -> float:
+    """Corrección de Dixon-Coles para los cuatro marcadores bajos."""
+    if i == 0 and j == 0:
+        return 1 - lh * la * rho
+    if i == 0 and j == 1:
+        return 1 + lh * rho
+    if i == 1 and j == 0:
+        return 1 + la * rho
+    if i == 1 and j == 1:
+        return 1 - rho
+    return 1.0
+
+
+def matriz(lh: float, la: float, rho: float | None = None) -> list[list[float]]:
+    """Probabilidad de cada marcador (suma 1). rho=None usa config.POISSON_RHO; 0 = Poisson simple."""
+    rho = config.POISSON_RHO if rho is None else rho
+    r = range(MAX_GOLES + 1)
+    ph = [_pmf(i, lh) for i in r]
+    pa = [_pmf(j, la) for j in r]
+    m = [[ph[i] * pa[j] * max(0.0, _tau(i, j, lh, la, rho)) for j in r] for i in r]
+    total = sum(map(sum, m))
+    return [[x / total for x in fila] for fila in m]
 
 
 def mercados(lh: float, la: float) -> dict:
@@ -51,13 +79,20 @@ def mercados(lh: float, la: float) -> dict:
     return out
 
 
-def lambdas_de_datos(d: dict) -> tuple[float, float] | None:
-    """d = {"xg_h", "xga_h", "xg_a", "xga_a"} o {"gf_h", "gc_h", "gf_a", "gc_a"} (promedios por partido)."""
+def lambdas_de_datos(d: dict, k: float | None = None) -> tuple[float, float] | None:
+    """d = {"xg_h", "xga_h", "xg_a", "xga_a"} o {"gf_h", "gc_h", "gf_a", "gc_a"} (promedios por partido).
+    Opcional d["n"]: partidos que respaldan esos promedios (10 si no viene).
+    k = partidos de moderación hacia el equipo promedio (None usa config.POISSON_K; 0 = promedio crudo)."""
+    k = config.POISSON_K if k is None else k
+    n = d.get("n") if isinstance(d.get("n"), (int, float)) and d["n"] > 0 else 10
     for a, b, c, e in (("xg_h", "xga_h", "xg_a", "xga_a"), ("gf_h", "gc_h", "gf_a", "gc_a")):
-        if all(isinstance(d.get(k), (int, float)) and d[k] >= 0 for k in (a, b, c, e)):
+        if all(isinstance(d.get(x), (int, float)) and d[x] >= 0 for x in (a, b, c, e)):
             lh = (d[a] + d[e]) / 2
             la = (d[c] + d[b]) / 2
             if lh > 0 and la > 0:
+                if k > 0:
+                    lh = (lh * n + PRIOR_LOCAL * k) / (n + k)
+                    la = (la * n + PRIOR_VISITANTE * k) / (n + k)
                 return lh, la
     return None
 

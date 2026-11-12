@@ -232,3 +232,67 @@ def test_aviso_sin_dia_no_se_repite(monkeypatch):
     assert "sin-dia-2026-11-09" not in [c for c, _, _ in AL.pendientes(viejo)]
     monkeypatch.setattr(AL, "ahora", lambda: dt.datetime(2026, 11, 10, 13, 0))
     assert not any(c.startswith("sin-dia") for c, _, _ in AL.pendientes(viejo))   # fuera de 8–10 a. m. no sale
+
+
+# ---------------------------------------------------------------------------
+# Lectura de cuotas: el caso real «1 ,44 6100» que se registró como cuota 44
+# ---------------------------------------------------------------------------
+def _msg(texto, n=20):
+    return {"message": {"message_id": n, "chat": {"id": 111, "type": "private"}, "text": texto}}
+
+
+def _esperar_detalle(dia):
+    ref = dia["plan"][0]["id"]
+    cb = {"id": "c", "from": {"id": 111}, "message": {"chat": {"id": 111}, "message_id": 5, "text": "x"}}
+    app.procesar({"callback_query": {**cb, "data": f"si:{ref}"}})
+    return ref
+
+
+def test_pegar_decimales():
+    assert app.pegar_decimales("1 ,44 6100") == "1,44 6100"
+    assert app.pegar_decimales("1, 44 6100") == "1,44 6100"
+    assert app.pegar_decimales("1 . 5 3000") == "1.5 3000"
+    for intacto in ("1,44 6100", "3.000 1,45", "hice 1 y 3", "1,42 3000", "2 6100"):
+        assert app.pegar_decimales(intacto) == intacto
+
+
+def test_decimal_con_espacio_se_registra_bien(entorno):
+    env, dia = entorno
+    _esperar_detalle(dia)
+    app.procesar(_msg("1 ,44 6100"))
+    r = db.registro(sync.hoy())[-1]
+    assert r["cuota"] == 1.44 and r["valor"] == 6100
+
+
+def test_cuota_dudosa_pide_confirmar(entorno):
+    env, dia = entorno
+    ref = _esperar_detalle(dia)
+    antes = len(db.registro(sync.hoy()))
+    app.procesar(_msg("44 6100"))
+    assert len(db.registro(sync.hoy())) == antes and db.get("espera")["ref"] == ref
+    assert "¿Seguro?" in textos(env)[-1]
+    app.procesar(_msg("sí 44 6100", 21))
+    assert db.registro(sync.hoy())[-1]["cuota"] == 44
+
+
+def test_corregir_cuota_sin_ia(entorno, monkeypatch):
+    env, dia = entorno
+    _esperar_detalle(dia)
+    app.procesar(_msg("sí 44 6100"))
+    antes = len(db.registro(sync.hoy()))
+    monkeypatch.setattr(app.ia, "conversar", lambda *a, **k: (_ for _ in ()).throw(AssertionError("no debe llamar a la IA")))
+    app.procesar(_msg("Noooo la cuota es 1.44", 22))
+    r = db.registro(sync.hoy())
+    assert len(r) == antes and r[-1]["cuota"] == 1.44 and r[-1]["valor"] == 6100
+    assert "Corregido" in textos(env)[-1]
+
+
+def test_si_la_ia_revienta_responde_el_respaldo(entorno, monkeypatch):
+    env, dia = entorno
+
+    def revienta(*a, **k):
+        raise AttributeError("x")
+
+    monkeypatch.setattr(app.ia, "conversar", revienta)
+    app.procesar(_msg("¿cómo voy hoy?", 23))
+    assert "No pude procesar" not in textos(env)[-1] and "AttributeError" not in textos(env)[-1]
