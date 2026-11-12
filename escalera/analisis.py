@@ -139,6 +139,35 @@ def candidatos_statarea(filas: list[dict], umbral: int = 50, hora_min: str = "07
     return elegidos
 
 
+_CACHE_POIS: dict = {}
+
+
+def _poisson(c: dict) -> dict | None:
+    """λ de datos reales (c["stats"]: xG/xGA o goles a favor/en contra, últimos 10) o, si no hay,
+    ajustado al 1X2 del mercado (solo descriptivo: marcadores probables y escenarios)."""
+    from .nucleo import poisson as PO
+    lam, fuente = (PO.lambdas_de_datos(c["stats"]) if isinstance(c.get("stats"), dict) else None), "datos"
+    if lam is None:
+        casas = c.get("casas1x2") or (c.get("casas") if c.get("mercado", "1X2") == "1X2" else None)
+        if not casas:
+            return None
+        clave = (c.get("h"), c.get("a"), tuple(tuple(x.get("o") or ()) for x in casas))
+        if clave not in _CACHE_POIS:
+            try:
+                p1, px, p2 = MK._p1x2(casas)
+                _CACHE_POIS[clave] = PO.ajustar_a_mercado(p1, px, p2)
+            except Exception:
+                _CACHE_POIS[clave] = None
+        lam, fuente = _CACHE_POIS[clave], "mercado"
+        if lam is None:
+            return None
+    pm = PO.mercados(*lam)
+    pp = PO.prob_seleccion(pm, c.get("mercado", "1X2"), c.get("lado", "1"), c.get("linea"), c.get("equipo"))
+    return {"fuente": fuente, "lh": pm["lh"], "la": pm["la"], "p": None if pp is None else round(pp, 4),
+            "pEmpate": round(pm["X"], 4), "pBtts": round(pm["BTTS"], 4), "pOver25": round(pm["O2.5"], 4),
+            "marcadores": pm["marcadores"]}
+
+
 def evaluar(c: dict, exigir_verificado: bool = False) -> dict:
     """c = candidato con "mercado", "lado", "linea", "casas" [{bk, o:[…]}] (+ casas1x2, noticias, alerta).
     "verificado": true = fecha y hora confirmadas en Flashscore/ESPN/Sofascore (hoy y sin empezar).
@@ -165,6 +194,12 @@ def evaluar(c: dict, exigir_verificado: bool = False) -> dict:
     mk = r["p_gana"]
     sa = MK.prob_statarea(c) if c.get("statarea") else c.get("sa")
     p = PR.mezcla(mk, sa, PESO_MERCADO) if sa is not None else mk
+    pois = _poisson(c)                                   # prompt 3: modelo con goles/xG (si hay datos)
+    if pois and pois.get("p") is not None and pois["fuente"] == "datos":
+        pp = pois["p"]
+        p = (0.70 * mk + 0.15 * sa + 0.15 * pp) if sa is not None else (0.85 * mk + 0.15 * pp)
+    if pois:
+        c["poisson"] = {k: v for k, v in pois.items() if k != "_pm"}
     p_push, o = r["p_push"], r["o"]
     e = MK.ev(p, p_push, o)
     c.update(mk=round(mk, 4), sa=None if sa is None else round(sa, 4), p=round(p, 4), p_push=round(p_push, 4),

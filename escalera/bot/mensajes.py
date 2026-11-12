@@ -232,6 +232,16 @@ def _lectura(j: dict) -> list[str]:
     out = [f"{barra_txt}  <i>{e(j.get('lectura', ''))}</i>"]
     if j.get("cuotaJusta"):
         out.append(f"⚖️ Cuota justa {cuota(j['cuotaJusta'])} · 🧭 {e(j.get('veredicto', ''))}")
+    if j.get("difModelo") is not None:
+        out.append(("📈 Modelo vs mercado: " + pct(j["difModelo"], True, 1)
+                    + (" · señal de valor (≥ 5 pts)" if j.get("senalValor") else "")))
+    if j.get("marcadores"):
+        out.append("🔢 Marcadores probables: " + ", ".join(f"{m['m']} ({pct(m['p'])})" for m in j["marcadores"]))
+    if j.get("lecturaPopular"):
+        out.append(f"👥 <i>{e(j['lecturaPopular'])}</i>")
+    if j.get("abogado"):
+        out.append("😈 <b>Abogado del diablo</b>")
+        out += [f"• {e(x)}" for x in j["abogado"][:3]]
     return out + [""]
 
 

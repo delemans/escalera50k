@@ -99,6 +99,47 @@ COMO_PIERDE = {
 }
 
 
+def lectura_popular(c: dict) -> str | None:
+    """Prompt 2: lo que «todos creen» (lo que dice el precio) y qué supone."""
+    mk, o = c.get("mk"), c.get("o")
+    if mk is None:
+        return None
+    m, lado = c.get("mercado", "1X2"), str(c.get("lado"))
+    quien = c.get("h") if lado in ("1", "1X") else c.get("a") if lado in ("2", "X2") else None
+    if m in ("1X2", "DNB", "DC") and quien:
+        return (f"La lectura popular: {quien} es favorito ({_pct(mk, 0)} según las casas). Supone que su nivel y "
+                "su localía pesan más que la motivación del rival y que no rota titulares.")
+    if m == "GOLES":
+        return (f"La lectura popular: partido de {'muchos' if lado == 'over' else 'pocos'} goles ({_pct(mk, 0)}). "
+                "Supone que los dos mantienen su ritmo ofensivo/defensivo de siempre.")
+    if m == "BTTS":
+        return f"La lectura popular: {'marcan los dos' if lado == 'si' else 'alguno se queda en cero'} ({_pct(mk, 0)})."
+    return f"El mercado le da {_pct(mk, 0)} a esta selección."
+
+
+def abogado_del_diablo(c: dict, pierde: float, como: str) -> list[str]:
+    """Prompt 5: las 3 razones más fuertes por las que este pick podría fallar, con el dato que lo confirmaría."""
+    r = []
+    sa, mk, pois = c.get("sa"), c.get("mk"), c.get("poisson") or {}
+    if sa is not None and mk is not None and sa < mk - 0.03:
+        r.append(f"StatArea es más prudente ({_pct(sa, 0)} vs {_pct(mk, 0)} del mercado): su modelo de forma ve menos.")
+    if pois.get("p") is not None and c.get("p") and pois["p"] < c["p"] - 0.03:
+        r.append(f"El modelo Poisson ({'datos' if pois.get('fuente') == 'datos' else 'ajustado al mercado'}) le da "
+                 f"{_pct(pois['p'], 0)}: menos que el sistema.")
+    if c.get("mercado") == "1X2" and pois.get("pEmpate") and pois["pEmpate"] >= 0.24:
+        r.append(f"El empate pasa {_pct(pois['pEmpate'], 0)} de las veces: un 0-0 o 1-1 lo tumba (mira DNB o doble oportunidad).")
+    if c.get("mercado") == "GOLES" and str(c.get("lado")) == "over" and pois.get("lh") and pois["lh"] + pois["la"] < 2.6:
+        r.append(f"Se esperan {pois['lh'] + pois['la']:.1f} goles en total: una tarde cerrada lo deja corto.".replace(".", ",", 1))
+    if (c.get("nCasas") or 0) < 3:
+        r.append("Pocas casas con cuota: el precio puede no ser el real; confirma que BetPlay pague la mínima.")
+    if c.get("dispersion") and c["dispersion"] > 0.025:
+        r.append("Las casas no coinciden entre sí: alguien sabe algo (lesión, rotación) que aún no es público.")
+    if not c.get("noticias"):
+        r.append("Sin noticias confirmadas de alineación: una rotación de última hora cambia todo; revisa la alineación 1 h antes.")
+    r.append(f"Aun con todo a favor pierde {_pct(pierde, 0)} de las veces: {como}.")
+    return r[:3]
+
+
 def analisis_extra(c: dict) -> dict:
     """Escenarios (gana / devuelve / pierde), cuota justa, «pierde 1 de cada N»,
     cómo se pierde según el mercado y un veredicto de una línea. Solo usa números ya calculados."""
@@ -127,7 +168,17 @@ def analisis_extra(c: dict) -> dict:
         veredicto = f"Solo si BetPlay paga {_c(omin)} o más; a {_c(o)} pierde a la larga."
     else:
         veredicto = "No apostar: la cuota no paga el riesgo."
-    return {"escenarios": escenarios, "cuotaJusta": round(justa, 3) if justa else None,
+    popular, abogado, rompe = lectura_popular(c), abogado_del_diablo(c, pierde, cp), None
+    pois = c.get("poisson") or {}
+    if pois.get("marcadores"):
+        mas = pois["marcadores"][0]["m"]
+        rompe = f"El marcador más probable es {mas}" + (f" (modelo con datos)" if pois.get("fuente") == "datos" else " (según el mercado)") + f"; lo rompe {cp}."
+    dif = (p - (1 - push) / o) if o else None             # prompt 4: modelo vs mercado
+    return {"lecturaPopular": popular, "abogado": abogado, "rompe": rompe,
+            "difModelo": round(dif, 4) if dif is not None else None,
+            "senalValor": bool(dif is not None and dif >= 0.05),
+            "marcadores": pois.get("marcadores"), "poisson": pois.get("p"), "poissonFuente": pois.get("fuente"),
+            "escenarios": escenarios, "cuotaJusta": round(justa, 3) if justa else None,
             "pierde1de": n, "comoPierde": cp, "veredicto": veredicto,
             "lectura": (f"Gana {_pct(p, 0)}" + (f", devuelve {_pct(push, 0)}" if push else "")
                         + f", pierde {_pct(pierde, 0)}" + (f" (1 de cada {n})" if n else "") + f": pierde {cp}.")}
