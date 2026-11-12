@@ -7,6 +7,7 @@ CLI · comandos que usa la tarea programada (y tú, para probar)
   python -m escalera.cli liquidar entrada.json  [--out salida.json]
   python -m escalera.cli informe apuestas.json  [--inicial 90000] [--real]
   python -m escalera.cli tipster dia.json tipster.json apuestas.json [--out t.json]  → sección dia.tipster + filas
+  python -m escalera.cli millonaria --banca 36100 [--fondo 6100] [--meta 3000000]   → plan por hitos
   python -m escalera.cli evaluar 0.70 1.45
   python -m escalera.cli riesgo --ev 0.03 --apuestas 2 --stake 0.02 --cuota 1.6
 """
@@ -88,6 +89,14 @@ def main(argv=None):
     t.add_argument("picks")
     t.add_argument("apuestas")
     t.add_argument("--out")
+    mi = sub.add_parser("millonaria")
+    mi.add_argument("--banca", type=float, required=True)
+    mi.add_argument("--meta", type=float, default=3_000_000)
+    mi.add_argument("--fondo", type=float)
+    mi.add_argument("--saldo-serie", type=float)
+    mi.add_argument("--cuota", type=float, default=1.50)
+    mi.add_argument("--p", type=float, default=0.65)
+    mi.add_argument("--out")
     e = sub.add_parser("evaluar")
     e.add_argument("p", type=float)
     e.add_argument("cuota", type=float)
@@ -129,6 +138,9 @@ def main(argv=None):
         ev = TIP.evaluar(dia, picks)
         _salida({"tipster": {**ev, "record": TIP.record(filas)},
                  "filasNuevas": TIP.filas_nuevas(ev["picks"], filas, dia["fecha"])}, a.out)
+    elif a.cmd == "millonaria":
+        from .nucleo import millonaria as MI
+        _salida(MI.plan(a.banca, a.meta, a.fondo, a.saldo_serie, a.cuota, a.p), a.out)
     elif a.cmd == "evaluar":
         ev = V.evaluar(a.p, a.cuota)
         print(f"EV {ev.ev:+.2%} · mínima {ev.omin:.2f} · justa {ev.justa:.2f} · Kelly {ev.kelly:.2%} · {ev.texto}")
