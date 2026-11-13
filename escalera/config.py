@@ -50,6 +50,12 @@ POISSON_RHO = _float("POISSON_RHO", -0.08)
 POISSON_K = _float("POISSON_K", 4.0)
 ODDS_API_KEY = os.environ.get("ODDS_API_KEY", "")          # the-odds-api.com (gratis 500 créditos/mes)
 ODDS_MAX_LIGAS = int(os.environ.get("ODDS_MAX_LIGAS", "8"))
+# Cada liga gasta (mercados × regiones) créditos por descarga: "h2h,totals" + "eu" = 2; solo "h2h" = 1 (el doble de ligas)
+ODDS_MERCADOS = os.environ.get("ODDS_MERCADOS", "h2h,totals")
+ODDS_REGIONES = os.environ.get("ODDS_REGIONES", "eu")
+ODDS_RESERVA = int(os.environ.get("ODDS_RESERVA", "20"))             # deja de descargar si quedan menos créditos que esto
+ODDS_LIGAS_PRIMERO = [x.strip() for x in os.environ.get("ODDS_LIGAS_PRIMERO", "").split(",") if x.strip()]   # claves soccer_… que van siempre
+ODDS_LIGAS_EXCLUIR = [x.strip() for x in os.environ.get("ODDS_LIGAS_EXCLUIR", "").split(",") if x.strip()]
 IA_ORDEN = os.environ.get("IA_ORDEN", "gemini,groq,openrouter,anthropic")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY", "")
 GEMINI_MODELO = os.environ.get("GEMINI_MODEL", "")           # vacío = se elige solo

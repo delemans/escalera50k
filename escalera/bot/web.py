@@ -143,7 +143,10 @@ def cuotas_cache(horas: float = 10.0) -> bytes:
     from ..fuentes import odds_api
     try:
         desde, hasta = odds_api.ventana_hoy()
-        datos = odds_api.descargar(config.ODDS_API_KEY, desde, hasta, max_ligas=config.ODDS_MAX_LIGAS)
+        datos = odds_api.descargar(config.ODDS_API_KEY, desde, hasta, max_ligas=config.ODDS_MAX_LIGAS,
+                                   mercados=config.ODDS_MERCADOS, regiones=config.ODDS_REGIONES,
+                                   reserva=config.ODDS_RESERVA, primero=config.ODDS_LIGAS_PRIMERO,
+                                   excluir=config.ODDS_LIGAS_EXCLUIR)
     except Exception as ex:                       # nunca tumbar el bot por la API
         return json.dumps({"eventos": [], "error": f"{type(ex).__name__}: {ex}"[:200]}).encode()
     cuerpo = json.dumps(datos, ensure_ascii=False).encode()

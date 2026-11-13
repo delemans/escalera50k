@@ -37,13 +37,22 @@ def _iso(t: dt.datetime) -> str:
     return t.astimezone(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def costo_por_liga(mercados: str, regiones: str) -> int:
+    """Créditos que gasta una liga en /odds: mercados × regiones."""
+    return max(1, len([m for m in mercados.split(",") if m.strip()])) * max(1, len([r for r in regiones.split(",") if r.strip()]))
+
+
 def descargar(clave: str, desde: dt.datetime, hasta: dt.datetime, max_ligas: int = 15,
-              mercados: str = "h2h,totals", regiones: str = "eu") -> dict:
-    """Devuelve {"eventos": [...], "restante": créditos, "ligas": [...]}. Solo fútbol."""
+              mercados: str = "h2h,totals", regiones: str = "eu", reserva: int = 0,
+              primero: list[str] | None = None, excluir: list[str] | None = None) -> dict:
+    """Devuelve {"eventos", "restante", "ligas", "omitidas", "creditos"}. Solo fútbol.
+    primero: claves de liga (soccer_…) que entran siempre que tengan partidos; excluir: las que nunca.
+    reserva: se detiene cuando quedan menos créditos que esto, para no agotar el mes."""
     q = lambda **k: urllib.parse.urlencode({"apiKey": clave, **k})
+    primero, excluir = list(primero or []), set(excluir or [])
     deportes, _ = _get(f"{BASE}/sports?{q()}")
     futbol = [d for d in deportes if d.get("key", "").startswith("soccer_") and d.get("active")
-              and not d.get("has_outrights")]
+              and not d.get("has_outrights") and d["key"] not in excluir]
     ventana = {"commenceTimeFrom": _iso(desde), "commenceTimeTo": _iso(hasta)}
     con_partidos = []
     for d in futbol:                                     # /events no gasta créditos
@@ -53,18 +62,24 @@ def descargar(clave: str, desde: dt.datetime, hasta: dt.datetime, max_ligas: int
             continue
         if evs:
             con_partidos.append((len(evs), d))
-    con_partidos.sort(key=lambda x: -x[0])
-    eventos, restante, ligas = [], None, []
+    orden = lambda x: (primero.index(x[1]["key"]) if x[1]["key"] in primero else len(primero), -x[0])
+    con_partidos.sort(key=orden)
+    costo = costo_por_liga(mercados, regiones)
+    eventos, restante, ligas, gastado = [], None, [], 0
     for _, d in con_partidos[:max_ligas]:
+        if restante is not None and str(restante).isdigit() and int(restante) - costo < reserva:
+            break                                        # cuida los créditos del mes
         try:
             evs, restante = _get(f"{BASE}/sports/{d['key']}/odds?{q(regions=regiones, markets=mercados, oddsFormat='decimal', **ventana)}")
         except Exception:
             continue
+        gastado += costo
         for e in evs:
             e["liga"] = d.get("title") or d["key"]
         eventos += evs
         ligas.append(d.get("title") or d["key"])
-    return {"eventos": eventos, "restante": restante, "ligas": ligas,
+    omitidas = [d.get("title") or d["key"] for _, d in con_partidos if (d.get("title") or d["key"]) not in ligas]
+    return {"eventos": eventos, "restante": restante, "ligas": ligas, "omitidas": omitidas, "creditos": gastado,
             "generado": _iso(dt.datetime.now(dt.timezone.utc))}
 
 
