@@ -296,3 +296,25 @@ def test_si_la_ia_revienta_responde_el_respaldo(entorno, monkeypatch):
     monkeypatch.setattr(app.ia, "conversar", revienta)
     app.procesar(_msg("¿cómo voy hoy?", 23))
     assert "No pude procesar" not in textos(env)[-1] and "AttributeError" not in textos(env)[-1]
+
+
+def test_picks_por_probabilidad():
+    from escalera.bot import mensajes as M
+    dia = {"picks": [
+        {"id": "a", "h": "A", "a": "B", "lg": "L1", "t": "10:00", "sel": "Gana A", "o": 1.5, "p": 0.62, "ev": -0.07, "valor": False, "motivo": None},
+        {"id": "b", "h": "C", "a": "D", "lg": "L2", "t": "15:00", "sel": "Más de 1,5", "o": 1.25, "p": 0.83, "ev": 0.04, "valor": True, "motivo": None},
+        {"id": "c", "h": "E", "a": "F", "lg": "L3", "t": "20:00", "sel": "Gana E", "o": 1.4, "p": 0.74, "ev": 0.03, "valor": True, "motivo": None},
+        {"id": "d", "h": "G", "a": "H", "lg": "L4", "t": "21:00", "sel": "Gana G", "o": 1.3, "p": 0.9, "motivo": "Descartado: una sola casa"},
+        "roto"]}
+    t = M.picks_top(dia)
+    assert t.index("Más de 1,5") < t.index("Gana E") < t.index("Gana A") and "Gana G" not in t   # orden y sin descartados
+    assert "3 de 3" in t and "83" in t
+    tarde = M.picks_top(dia, hora="12:00")
+    assert "Gana A" not in tarde and "2 de 2" in tarde                                     # los que ya empezaron no salen
+    assert "1 de 3" in M.picks_top(dia, n=1) and "no hay picks" in M.picks_top({}) and "no hay picks" in M.picks_top(dia, hora="23:00")
+
+
+def test_comando_picks(entorno):
+    env, dia = entorno
+    app.procesar({"message": {"message_id": 30, "chat": {"id": 111, "type": "private"}, "text": "/picks 5"}})
+    assert "Picks por probabilidad" in textos(env)[-1] or "no hay picks" in textos(env)[-1]

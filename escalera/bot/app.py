@@ -251,6 +251,10 @@ def cmd(texto: str, chat_id) -> bool:
         enviar_dia(dia)
     elif c == "/plan":
         tg.enviar(chat_id, M.plan(dia) or "Hoy no hay plan.")
+    elif c in ("/picks", "/top", "/todos"):
+        n = F.leer_numero(partes[1]) if len(partes) > 1 else None
+        hora = sync.ahora().strftime("%H:%M") if (dia or {}).get("fecha") == sync.hoy() else None
+        tg.enviar(chat_id, M.picks_top(dia or {}, int(n) if n else 20, hora))
     elif c in ("/resultados", "/historial", "/comovoy"):
         desde = (sync.ahora().date() - __import__("datetime").timedelta(days=7)).isoformat()
         tg.enviar(chat_id, M.resultados(db.registro(desde), dia))

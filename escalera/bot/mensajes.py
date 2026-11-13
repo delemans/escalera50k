@@ -615,6 +615,30 @@ def tipster(dia: dict, recibidos: list[dict] | None = None, siempre: bool = Fals
     return "\n".join(out)
 
 
+def picks_top(dia: dict, n: int = 20, hora: str | None = None) -> str:
+    """Todos los picks válidos del día, del más probable al menos probable.
+    hora «HH:MM»: oculta los partidos que ya empezaron. La probabilidad es la del sistema (mercado + modelo)."""
+    todos = [x for x in (dia.get("picks") or []) if isinstance(x, dict) and isinstance(x.get("p"), (int, float))]
+    validos = [x for x in todos if not x.get("motivo") and isinstance(x.get("o"), (int, float))]
+    vivos = [x for x in validos if not hora or str(x.get("t", "99:99")) > hora]
+    if not vivos:
+        porque = "ya empezaron todos los partidos analizados" if validos else "el escaneo de hoy no dejó picks válidos"
+        return f"📋 Hoy no hay picks para listar: {porque}. Prueba /escanear."
+    vivos.sort(key=lambda x: (-x["p"], str(x.get("t", ""))))
+    n = max(1, min(int(n), 40))
+    filas = [_titulo("📋", "Picks por probabilidad", f"{min(n, len(vivos))} de {len(vivos)} disponibles"), LINEA]
+    for i, x in enumerate(vivos[:n], 1):
+        ev = x.get("ev")
+        marca = "✅" if x.get("valor") else ("⚠️" if x.get("alerta") else "▫️")
+        filas.append(f"{i}. {marca} <b>{pct(x['p'])}</b> · {e(x.get('sel') or '')} @ <b>{cuota(x['o'])}</b>"
+                     f"{' · EV ' + pct(ev, signo=True, dec=1) if isinstance(ev, (int, float)) else ''}")
+        filas.append(f"    <i>{e(x.get('t') or '')} · {e(x.get('h') or '')} – {e(x.get('a') or '')} · {e(x.get('lg') or '')}</i>")
+    filas += [LINEA, "✅ con valor · ▫️ sin valor (la cuota no compensa) · ⚠️ con alerta",
+              "<i>Probable no es rentable: un pick al 80 % pierde 1 de cada 5 veces, y solo los ✅ tienen "
+              "valor esperado a favor. Más con /picks 30.</i>"]
+    return "\n".join(filas)
+
+
 def ayuda() -> str:
     return "\n".join([
         _titulo("🤖", "Cómo usarme"), LINEA,
@@ -627,6 +651,7 @@ def ayuda() -> str:
         "<b>Comandos</b>",
         "/escanear pedir un escaneo nuevo del día (arranca en menos de 1 hora)",
         "/hoy resumen · /plan qué hacer · /tarjetas botones",
+        "/picks todos los picks del día por probabilidad (/picks 30 para más)",
         "/banca control · /saldo 100000 tu saldo real",
         "/stats estadísticas · /riesgo simulación",
         "/registro lo de hoy · /deshacer último registro",
